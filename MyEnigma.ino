@@ -101,12 +101,13 @@ unsigned int getCsum(void *block, uint8_t size) {
     crc = ~crc;
   }
   
+#ifdef DEBUG
   Serial.print(" getCsum: ");
   Serial.print(crc,HEX);
   Serial.print(F(" "));
   Serial.print(size,DEC);
   Serial.println();
-  
+#endif  
   
   return (int) crc;
 } // getCsum
@@ -152,12 +153,16 @@ uint8_t readSettings() {
   unsigned int ccsum;
   unsigned char *ptr = (unsigned char *)&settings;
 
+#ifdef DEBUG
   Serial.print("readSetting: ccsum=");
+#endif
   //First read from first location
   eeprom_read_block((void*)&settings, (void*)addr, sizeof(settings));
 
   ccsum = getCsum((void*) ptr, sizeof(settings) - 2);
+#ifdef DEBUG
   Serial.println(ccsum,HEX);
+#endif
   while (ccsum == settings.checksum) { // if valid csum, check if block is valid
     if (settings.valid){
       settings.nextlocation=addr;// this is were the valid block is right now
@@ -186,10 +191,6 @@ void setup() {
   // from http://playground.arduino.cc/Code/EEPROMWriteAnything
   //  eeprom_read_block((void*)&settings, (void*)0, sizeof(settings));
 
-    ccsum = getCsum((void*) ptr, sizeof(settings) - 2);
-    Serial.print("settings struct csum=");
-    Serial.println(ccsum, HEX);
-
   //  if (ccsum != settings.checksum) {
   if (readSettings()!=0){
     Serial.println("BAD checksum, setting defaults");
@@ -205,7 +206,7 @@ void setup() {
     settings.ringstellung[1] = 'A';
     settings.ringstellung[2] = 'A';
     settings.ringstellung[3] = 'A';
-    for (i = 0; i < 26; i++) {
+    for (i = 0; i < sizeof(settings.plugboard)/2; i++) {
       settings.plugboard[i][0] = ' ';
       settings.plugboard[i][1] = ' ';
     }
@@ -231,9 +232,11 @@ void setup() {
   switch (settings.model) {
     case M3:
       Serial.println(F("M3"));
+      break;
       ;;
     case M4:
       Serial.println(F("M4"));
+      break;
       ;;
     default:
       Serial.print(F("Unknown: "));
@@ -259,7 +262,7 @@ void setup() {
   Serial.print(F(" "));
   Serial.println(settings.ringstellung[3]);
   Serial.print(F("Plugboard (Steckerbrett): "));
-  for (i = 0; i < 26; i++) {
+  for (i = 0; i < sizeof(settings.plugboard)/2; i++) {
     if (settings.plugboard[i][0] != ' ') {
       Serial.print(i, DEC);
       Serial.print(F(" "));
@@ -467,11 +470,12 @@ uint8_t checkPlugboard() {
   i2c_write(mcp_address+1,GPPUA,0xff); // enable 100k pullup
   i2c_write(mcp_address+1,GPPUB,0xff); //
   
-  for (plug=0;plug<26;plug++){
+  for (plug=0;plug<sizeof(settings.plugboard)/2;plug++){
     //make port "plug" output
     //set  port "plug" low (all others are pullup=high)
     //read all registers, see if any other port is low
     //  if yes - update plug table and print out
+    //make port input pullup
   }
 
 } // checkPlugboard

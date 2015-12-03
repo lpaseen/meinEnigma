@@ -35,7 +35,7 @@ typedef struct {
   uint8_t ukw;               // what reflector that is loaded
   uint8_t rotor[4];          // current wheel no in the 4 or 3 positions
   char ringstellung[4];      // Setting of the 4 rotors ring.
-  char plugboard[26][2];     // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
+  char plugboard[26];        // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
   unsigned long odometer;    // How many characters this unit has en/decrypted
   uint8_t currentrotor[4];   // current position of the 4 rotors
   unsigned int nextlocation; // start for next section in eeprom
@@ -52,15 +52,30 @@ HT16K33::KEYDATA keys;
 //  MCP23017 registers, all as seen from bank0
 //
 #define mcp_address 0x20 // I2C Address of MCP23017
-#define IODIRA 0x00 // IO Direction Register Address of Port A
-#define IODIRB 0x01 // IO Direction Register Address of Port B
-#define GPPUA  0x06 // Register Address of Port A
-#define GPPUB  0x07 // Register Address of Port B
-#define IOCON  0x0A // Control register
-#define GPIOA  0x12 // Register Address of Port A
-#define GPIOB  0x13 // Register Address of Port B
-#define OLATA  0x14 // Register Address of Outputlatch A
-#define OLATB  0x15 // Register Address of Outputlatch B
+#define IODIRA    0x00 // IO Direction Register Address of Port A
+#define IODIRB    0x01 // IO Direction Register Address of Port B
+#define IPOLA     0x02 // Input polarity port register 
+#define IPOLB     0x03 // 
+#define GPINTENA  0x04 // Interrupt on change
+#define GPINTENB  0x05 // 
+#define DEFVALA   0x06 // Default value register
+#define DEFVALB   0x07 // 
+#define INTCONA   0x08 // Interrupt on change control register
+#define INTCONB   0x09 // 
+#define IOCON     0x0A // Control register
+#define IOCON     0x0B // 
+#define GPPUA     0x0C // GPIO Pull-ip resistor register
+#define GPPUB     0x0D // 
+#define INTFA     0x0E // Interrupt flag register
+#define INTFB     0x0F // 
+#define INTCAPA   0x10 // Interrupt captred value for port register
+#define INTCAPB   0x11 // 
+#define GPIOA     0x12 // General purpose io register
+#define GPIOB     0x13 // 
+#define OLATA     0x14 // Output latch register
+#define OLATB     0x15 // 
+
+
 
 
 //Enigma lamp and Keyboard layout:
@@ -78,6 +93,43 @@ const char scancodes[36] = "QWERTZUIOASDFGHJKPYXCVBNML123456789";
 //after 'Z'-65 comes control LEDs [\]^_
 //Usage: led['A'-65] or led[char-65]
 const byte led[] = {16, 22, 4, 17, 19, 25, 20, 8, 14, 0, 18, 3, 5, 6, 7, 9, 10, 15, 24, 23, 2, 21, 1, 13, 12, 11, 26, 27, 28, 29, 30};
+
+/****************************************************************/
+// Write a single byte
+uint8_t i2c_write(uint8_t unitaddr,uint8_t val){
+  Wire.beginTransmission(unitaddr);
+  Wire.write(val);
+  return Wire.endTransmission();
+}
+
+/****************************************************************/
+// Write two bytes
+uint8_t i2c_write2(uint8_t unitaddr,uint8_t val1,uint8_t val2){
+  Wire.beginTransmission(unitaddr);
+  Wire.write(val1);
+  Wire.write(val2);
+  return Wire.endTransmission();
+}
+
+/****************************************************************/
+// read a byte from specific address (send one byte(address to read) and read a byte)
+uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
+  i2c_write(unitaddr,addr);
+  Wire.requestFrom(unitaddr,1);
+  return Wire.read();    // read one byte
+}
+
+/****************************************************************/
+// read 2 bytes starting at a specific address
+// read is done in two sessions - as required by mcp23017 (page 5 in datasheet)
+uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
+  uint16_t val;
+  i2c_write(unitaddr,addr);
+  Wire.requestFrom(unitaddr, 1);
+  val=Wire.read();
+  Wire.requestFrom(unitaddr, 1);
+  return Wire.read()<<8|val;
+}
 
 /****************/
 unsigned int getCsum(void *block, uint8_t size) {
@@ -206,9 +258,8 @@ void setup() {
     settings.ringstellung[1] = 'A';
     settings.ringstellung[2] = 'A';
     settings.ringstellung[3] = 'A';
-    for (i = 0; i < sizeof(settings.plugboard)/2; i++) {
-      settings.plugboard[i][0] = ' ';
-      settings.plugboard[i][1] = ' ';
+    for (i = 0; i < sizeof(settings.plugboard); i++) {
+      settings.plugboard[i]= ' ';
     }
     settings.currentrotor[0] = ' ';
     settings.currentrotor[1] = 'A';
@@ -262,13 +313,11 @@ void setup() {
   Serial.print(F(" "));
   Serial.println(settings.ringstellung[3]);
   Serial.print(F("Plugboard (Steckerbrett): "));
-  for (i = 0; i < sizeof(settings.plugboard)/2; i++) {
-    if (settings.plugboard[i][0] != ' ') {
-      Serial.print(i, DEC);
-      Serial.print(F(" "));
-      Serial.print(settings.plugboard[i][0]);
+  for (i = 0; i < sizeof(settings.plugboard); i++) {
+    if (settings.plugboard[i] != ' ') {
+      Serial.print(i,DEC);
       Serial.print(F("->"));
-      Serial.print(settings.plugboard[i][1]);
+      Serial.print(settings.plugboard[i]);
       Serial.print(F(" "));
     }
   }
@@ -277,18 +326,18 @@ void setup() {
   Serial.println(settings.odometer, DEC);
 
   Wire.begin(); // enable the wire lib
-  i2c_write(mcp_address,IOCON,0b00110100);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(no addr inc)+DISSLW(Slew rate disabled)+HAEN(disable hw addr)+ODR(INT open)+INTPOL(act-low)+0(N/A)
-  i2c_write(mcp_address,IODIRA,0xff); // Set all ports to inputs
-  i2c_write(mcp_address,IODIRB,0xff); // Set all ports to inputs
-  i2c_write(mcp_address,GPPUA,0xff); // disable pullup (for now,to save power)
-  i2c_write(mcp_address,GPPUB,0xff); //
+  i2c_write2(mcp_address,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
+  i2c_write2(mcp_address,IODIRA,0xff); // Set all ports to inputs
+  i2c_write2(mcp_address,IODIRB,0xff); // Set all ports to inputs
+  i2c_write2(mcp_address,GPPUA,0); // disable pullup (for now,to save power)
+  i2c_write2(mcp_address,GPPUB,0); //
 
   //The other chip
-  i2c_write(mcp_address+1,IOCON,0b00110100);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(no addr inc)+DISSLW(Slew rate disabled)+HAEN(disable hw addr)+ODR(INT open)+INTPOL(act-low)+0(N/A)
-  i2c_write(mcp_address+1,IODIRA,0xff); // Set all ports to inputs
-  i2c_write(mcp_address+1,IODIRB,0xff); // Set all ports to inputs
-  i2c_write(mcp_address+1,GPPUA,0xff); // disable pullup (for now,to save power)
-  i2c_write(mcp_address+1,GPPUB,0xff); //
+  i2c_write2(mcp_address+1,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
+  i2c_write2(mcp_address+1,IODIRA,0xff); // Set all ports to inputs
+  i2c_write2(mcp_address+1,IODIRB,0xff); // Set all ports to inputs
+  i2c_write2(mcp_address+1,GPPUA,0); // disable pullup (for now,to save power)
+  i2c_write2(mcp_address+1,GPPUB,0); //
 
   HT.begin(0x00);
 
@@ -439,45 +488,151 @@ void writeString(char msg[], uint16_t sleep) {
 } // writeString
 
 /****************************************************************/
-// Write a single byte
-uint8_t i2c_write(uint8_t unitaddr,uint8_t val1,uint8_t val2){
-  Wire.beginTransmission(unitaddr);
-  Wire.write(val1);
-  Wire.write(val2);
-  return Wire.endTransmission();
-}
-
-/****************************************************************/
-// read a byte from specific address (send one byte(address to read) and read a byte)
- uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
-   i2c_write(unitaddr,addr,addr);
-  Wire.requestFrom(unitaddr,(uint8_t) 1);
-  return Wire.read();    // read one byte
-}
-
-
-
-/****************************************************************/
 // check the Steckerbrett
 // update the plugboard array with what plugs that are connected
 
 uint8_t checkPlugboard() {
-  uint8_t plug;
+  uint8_t plug,bit,mcp,port,i,plug2;
+  uint16_t val,val1,val2;
 
   // make all io ports inputs-pullup
-  i2c_write(mcp_address,GPPUA,0xff); // enable 100k pullup
-  i2c_write(mcp_address,GPPUB,0xff); //
-  i2c_write(mcp_address+1,GPPUA,0xff); // enable 100k pullup
-  i2c_write(mcp_address+1,GPPUB,0xff); //
-  
-  for (plug=0;plug<sizeof(settings.plugboard)/2;plug++){
+  i2c_write2(mcp_address,GPPUA,0xff); // enable 100k pullup
+  i2c_write2(mcp_address,GPPUB,0xff); //
+  i2c_write2(mcp_address+1,GPPUA,0xff); // enable 100k pullup
+  i2c_write2(mcp_address+1,GPPUB,0xff); //
+
+  //yes, it's inefficient code but it's a start
+  for (plug=0;plug<sizeof(settings.plugboard);plug++){
+    if (plug>=24){
+      bit=plug-24;
+      mcp=mcp_address+1;
+      port=1;
+    } else if (plug>=16){
+      bit=plug-16;
+      mcp=mcp_address+1;
+      port=0;
+    } else if (plug>=8){
+      bit=plug-8;
+      mcp=mcp_address;
+      port=1;
+    } else {
+      bit=plug;
+      mcp=mcp_address;
+      port=0;
+    }
+
     //make port "plug" output
-    //set  port "plug" low (all others are pullup=high)
+    i2c_write2(mcp,IODIRA+port,0xff ^ (1<<bit)); // Set port to input
+    
+    //set  port "plug" low
+    i2c_write2(mcp,GPIOA+port,0xff ^ (1<<bit));
+    //    i2c_write2(mcp,OLATA+port,0xff & (1<<bit));
+
+    val1=i2c_read2(mcp_address,GPIOA);
+    val2=i2c_read2(mcp_address+1,GPIOA);
+    //Quick check, need to optimize this code
+    for (i=0;i<16;i++){
+      if ((val1 & (1<<i))==0){
+	if (mcp==mcp_address){
+	  if (port==0 && i<8){
+	    if (bit==i){
+	      //	      Serial.print(F("*"));
+	      continue;
+	    }
+	  }else if (port==1 && i>=8){
+	    if (bit==(i-8)){
+	      //	      Serial.print(F("*"));
+	      continue;
+	    }
+	  }
+	}
+	settings.plugboard[plug]=i;
+	Serial.print(F(" found "));
+	Serial.print(plug,DEC);
+	Serial.print(F("=>"));
+	Serial.print(settings.plugboard[plug],DEC);
+	Serial.println();
+      }
+    }
+    for (i=0;i<16;i++){
+      if ((val2 & (1<<i))==0){
+	if (mcp==mcp_address+1){
+	  if (port==0 && i<8){
+	    if (bit==i){
+	      //	      Serial.print(F("*"));
+	      continue;
+	    }
+	  }else if (port==1 && i>=8){
+	    if (bit==(i-8)){
+	      //	      Serial.print(F("*"));
+	      continue;
+	    }
+	  }
+	}
+	settings.plugboard[plug]=i+16;
+	Serial.print(F(" found "));
+	Serial.print(plug,DEC);
+	Serial.print(F("=>"));
+	Serial.print(settings.plugboard[plug],DEC);
+	Serial.println();
+      }
+    }
+
+#ifdef DEBUG
+    //PSDEBUG
+    Serial.print(F(" "));
+    Serial.print(mcp,HEX);
+    Serial.print(F(":"));
+    Serial.print(port,DEC);
+    Serial.print(F("/"));
+    Serial.print(bit,HEX);
+    Serial.print(F(" "));
+    
+    if (val1<0x1000){Serial.print(F("0"));}
+    if (val1<0x100){Serial.print(F("0"));}
+    if (val1<0x10){Serial.print(F("0"));}
+    Serial.print(val1,HEX);
+    
+    Serial.print(F(" "));
+    
+    if (val2<0x1000){Serial.print(F("0"));}
+    if (val2<0x100){Serial.print(F("0"));}
+    if (val2<0x10){Serial.print(F("0"));}
+    Serial.print(val2,HEX);
+    Serial.println();
+#endif
+
+    //make port input again
+    i2c_write2(mcp,GPIOA+port,0xff);
+    i2c_write2(mcp,IODIRA+port,0xff);
+    //    i2c_write2(mcp,GPPUA+port,0xff);
+    
     //read all registers, see if any other port is low
     //  if yes - update plug table and print out
     //make port input pullup
   }
+  //PSDEBUG
+#ifndef DEBUG
+  Serial.println();
+  Serial.print(F("Plugboard (Steckerbrett): "));
+  for (i = 0; i < sizeof(settings.plugboard); i++) {
+    if (settings.plugboard[i] != ' ') {
+      Serial.print(i,DEC);
+      Serial.print(F("->"));
+      Serial.print(settings.plugboard[i],DEC);
+      Serial.print(F(" "));
+    }
+  }
+  Serial.println();
+  Serial.println();
+#endif
+  // disable all pullups to save power
+  i2c_write2(mcp_address,GPPUA,0);
+  i2c_write2(mcp_address,GPPUB,0);
+  i2c_write2(mcp_address+1,GPPUA,0);
+  i2c_write2(mcp_address+1,GPPUB,0);
 
+  delay(1000);
 } // checkPlugboard
 
 /****************************************************************/
@@ -519,6 +674,7 @@ void loop() {
 
 
   while (true) {
+    checkPlugboard();
     key=checkKB();
     if (key!=0){
       cnt=0;

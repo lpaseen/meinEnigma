@@ -1,6 +1,7 @@
 /****************************************************************
    MyEnigma
    v0.00 - test of library, keyboard and LEDs
+   v0.01 - more parts now working, just missing rotor and enigma code.
 */
 
 #include "ht16k33.h"
@@ -23,11 +24,16 @@
 
 typedef enum {M3,M4} enigmaModel_t;
 
+typedef struct {
+  char letter[26];         // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
+} letters_t;
+
 //TODO: 
 // Add something so we can have several presets in memory and then change between them
 
 // EEPROM structure version - to be able to handle upgrades
 #define VERSION 0
+
 typedef struct {
   uint8_t fwVersion;         // firmware version
   uint8_t preset;            // Allow multiple saved settings
@@ -35,7 +41,8 @@ typedef struct {
   uint8_t ukw;               // what reflector that is loaded
   uint8_t rotor[4];          // current wheel no in the 4 or 3 positions
   char ringstellung[4];      // Setting of the 4 rotors ring.
-  char plugboard[26];        // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
+  //char plugboard[26];        // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
+  letters_t plugboard;
   unsigned long odometer;    // How many characters this unit has en/decrypted
   uint8_t currentrotor[4];   // current position of the 4 rotors
   unsigned int nextlocation; // start for next section in eeprom
@@ -86,8 +93,7 @@ HT16K33::KEYDATA keys;
 //The order the keys on the keyboard are coded
 //Keyboard scancode table
 //A-Z for keyboard, 1-9 for buttons
-
-const char scancodes[36] = "QWERTZUIOASDFGHJKPYXCVBNML123456789";
+const char scancodes[] = "QWERTZUIOASDFGHJKPYXCVBNML123456789";
 
 //A=65 so the [0] element contain the number of the LED that shows "A"
 //after 'Z'-65 comes control LEDs [\]^_
@@ -132,6 +138,8 @@ uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
 }
 
 /****************/
+//calculate a checksum of a block
+// basic function taken from https://www.arduino.cc/en/Tutorial/EEPROMCrc
 unsigned int getCsum(void *block, uint8_t size) {
   unsigned char * data;
   unsigned int i, csum;
@@ -191,6 +199,12 @@ void saveSettings() {
   // else (current is invalid)
   //    - compare and save anything that changed
   //
+
+  
+  settings.nextlocation=0;
+  settings.valid=true;
+  settings.checksum = getCsum((void*) ptr, sizeof(settings) - 2);
+
   Serial.print(F("saveSettings at "));
   Serial.println(addr);
   eeprom_update_block((const void*)&settings, (void*)addr, sizeof(settings));
@@ -227,7 +241,7 @@ uint8_t readSettings() {
   }
   settings.valid=false;
   return 1; // csum invalid so no valid data
-} // saveSettings
+} // readSettings
 
 /****************************************************************/
 void setup() {
@@ -259,16 +273,13 @@ void setup() {
     settings.ringstellung[2] = 'A';
     settings.ringstellung[3] = 'A';
     for (i = 0; i < sizeof(settings.plugboard); i++) {
-      settings.plugboard[i]= ' ';
+      settings.plugboard.letter[i]=i;
     }
     settings.currentrotor[0] = ' ';
     settings.currentrotor[1] = 'A';
     settings.currentrotor[2] = 'B';
     settings.currentrotor[3] = 'C';
     settings.odometer = 0;
-    settings.nextlocation=0;
-    settings.valid=true;
-    settings.checksum = getCsum((void*) ptr, sizeof(settings) - 2);
     //    eeprom_update_block((const void*)&settings, (void*)0, sizeof(settings));
     saveSettings();
   } else {
@@ -312,16 +323,15 @@ void setup() {
   Serial.print(settings.ringstellung[2]);
   Serial.print(F(" "));
   Serial.println(settings.ringstellung[3]);
-  Serial.print(F("Plugboard (Steckerbrett): "));
+  Serial.println(F("Plugboard (Steckerbrett): "));
   for (i = 0; i < sizeof(settings.plugboard); i++) {
-    if (settings.plugboard[i] != ' ') {
+    if (settings.plugboard.letter[i] != i) {
+      Serial.print(F(" "));
       Serial.print(i,DEC);
       Serial.print(F("->"));
-      Serial.print(settings.plugboard[i]);
-      Serial.print(F(" "));
+      Serial.println(settings.plugboard.letter[i],DEC);
     }
   }
-  Serial.println();
   Serial.print(F("Odo meter: "));
   Serial.println(settings.odometer, DEC);
 
@@ -494,12 +504,17 @@ void writeString(char msg[], uint16_t sleep) {
 uint8_t checkPlugboard() {
   uint8_t plug,bit,mcp,port,i,plug2;
   uint16_t val,val1,val2;
+  letters_t newplugboard;
 
   // make all io ports inputs-pullup
   i2c_write2(mcp_address,GPPUA,0xff); // enable 100k pullup
   i2c_write2(mcp_address,GPPUB,0xff); //
   i2c_write2(mcp_address+1,GPPUA,0xff); // enable 100k pullup
   i2c_write2(mcp_address+1,GPPUB,0xff); //
+
+  for (i = 0; i < sizeof(newplugboard); i++) {
+    newplugboard.letter[i]=i;
+  }
 
   //yes, it's inefficient code but it's a start
   for (plug=0;plug<sizeof(settings.plugboard);plug++){
@@ -526,11 +541,10 @@ uint8_t checkPlugboard() {
     
     //set  port "plug" low
     i2c_write2(mcp,GPIOA+port,0xff ^ (1<<bit));
-    //    i2c_write2(mcp,OLATA+port,0xff & (1<<bit));
 
     val1=i2c_read2(mcp_address,GPIOA);
     val2=i2c_read2(mcp_address+1,GPIOA);
-    //Quick check, need to optimize this code
+    //Quick check, need to optimize this code a lot
     for (i=0;i<16;i++){
       if ((val1 & (1<<i))==0){
 	if (mcp==mcp_address){
@@ -546,12 +560,7 @@ uint8_t checkPlugboard() {
 	    }
 	  }
 	}
-	settings.plugboard[plug]=i;
-	Serial.print(F(" found "));
-	Serial.print(plug,DEC);
-	Serial.print(F("=>"));
-	Serial.print(settings.plugboard[plug],DEC);
-	Serial.println();
+	newplugboard.letter[plug]=i;
       }
     }
     for (i=0;i<16;i++){
@@ -569,38 +578,9 @@ uint8_t checkPlugboard() {
 	    }
 	  }
 	}
-	settings.plugboard[plug]=i+16;
-	Serial.print(F(" found "));
-	Serial.print(plug,DEC);
-	Serial.print(F("=>"));
-	Serial.print(settings.plugboard[plug],DEC);
-	Serial.println();
+	newplugboard.letter[plug]=i+16;
       }
     }
-
-#ifdef DEBUG
-    //PSDEBUG
-    Serial.print(F(" "));
-    Serial.print(mcp,HEX);
-    Serial.print(F(":"));
-    Serial.print(port,DEC);
-    Serial.print(F("/"));
-    Serial.print(bit,HEX);
-    Serial.print(F(" "));
-    
-    if (val1<0x1000){Serial.print(F("0"));}
-    if (val1<0x100){Serial.print(F("0"));}
-    if (val1<0x10){Serial.print(F("0"));}
-    Serial.print(val1,HEX);
-    
-    Serial.print(F(" "));
-    
-    if (val2<0x1000){Serial.print(F("0"));}
-    if (val2<0x100){Serial.print(F("0"));}
-    if (val2<0x10){Serial.print(F("0"));}
-    Serial.print(val2,HEX);
-    Serial.println();
-#endif
 
     //make port input again
     i2c_write2(mcp,GPIOA+port,0xff);
@@ -612,27 +592,30 @@ uint8_t checkPlugboard() {
     //make port input pullup
   }
   //PSDEBUG
-#ifndef DEBUG
-  Serial.println();
-  Serial.print(F("Plugboard (Steckerbrett): "));
-  for (i = 0; i < sizeof(settings.plugboard); i++) {
-    if (settings.plugboard[i] != ' ') {
-      Serial.print(i,DEC);
-      Serial.print(F("->"));
-      Serial.print(settings.plugboard[i],DEC);
-      Serial.print(F(" "));
-    }
-  }
-  Serial.println();
-  Serial.println();
-#endif
   // disable all pullups to save power
   i2c_write2(mcp_address,GPPUA,0);
   i2c_write2(mcp_address,GPPUB,0);
   i2c_write2(mcp_address+1,GPPUA,0);
   i2c_write2(mcp_address+1,GPPUB,0);
 
-  delay(1000);
+  if (memcmp(newplugboard.letter, settings.plugboard.letter, sizeof(settings.plugboard)) != 0){
+    //    memcpy(settings.plugboard, newplugboard,sizeof(settings.plugboard));
+    settings.plugboard=newplugboard;
+    saveSettings();
+#ifndef DEBUG
+    Serial.println(F("New Plugboard (Steckerbrett) setting: "));
+    for (i = 0; i < sizeof(settings.plugboard); i++) {
+      if (settings.plugboard.letter[i] != i) {
+	Serial.print(F(" "));
+	Serial.print(i,DEC);
+	Serial.print(F("->"));
+	Serial.println(settings.plugboard.letter[i],DEC);
+      }
+    }
+    Serial.println();
+    delay(1000);
+#endif
+  }
 } // checkPlugboard
 
 /****************************************************************/

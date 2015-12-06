@@ -1,8 +1,29 @@
 /****************************************************************
    MyEnigma
+   I'm writing this partly to learn programming. That means that
+   this code is not optimized several things could be done in a 
+   smarter way - I just don't know about them (yet).
+   If it bugs you - fix it and tell me about it, that's the way I learn.
+
+   Copyright: Peter Sjoberg <peters-src AT techwiz DOT ca>
+   License: GPL
+   Status: Pre Alpha, still adding functions to the code.
+
+   History:
    v0.00 - test of library, keyboard and LEDs
    v0.01 - more parts now working, just missing wheel and enigma code.
    v0.02 - added wheel code
+
+
+TODO: a lot but some "highligts"...
+   Decide what order to count the walze/letters in
+      right or left so the leftmost 4 wheel is wheel #4 
+      or left to right so same wheel is #1 - or maybe #0
+   Add switch code
+   Add decimal point
+   Add enigma crypto code
+   fix so output is more like final version instead of debug mode
+
 */
 
 #include "ht16k33.h"
@@ -64,7 +85,7 @@ typedef struct {
   char ringstellung[WALZECNT];      // Setting of the wheel ring.
   letters_t plugboard;
   unsigned long odometer;    // How many characters this unit has en/decrypted
-  char currentWalze[WALZECNT];   // current position of the wheel
+  char currentWalze[WALZECNT];   // current position of the wheel, 0-sizeof(walzeContent)-2 not the letters!
   unsigned int nextlocation; // start for next section in eeprom
   boolean valid;             // whatever this section is valid or not
   unsigned int checksum;
@@ -332,10 +353,10 @@ void setup() {
     for (i = 0; i < sizeof(settings.plugboard); i++) {
       settings.plugboard.letter[i]=i;
     }
-    settings.currentWalze[0] = 0;
-    settings.currentWalze[1] = 0;
-    settings.currentWalze[2] = 0;
-    settings.currentWalze[3] = 27;
+    settings.currentWalze[0] = sizeof(walzeContent)-2; // to get space
+    settings.currentWalze[1] = 2;
+    settings.currentWalze[2] = 1;
+    settings.currentWalze[3] = 0;
     settings.nextlocation=0;
     settings.odometer = 0;
     //    eeprom_update_block((const void*)&settings, (void*)0, sizeof(settings));
@@ -458,6 +479,7 @@ uint8_t checkKB() {
   HT16K33::KEYDATA oldkeys;
   
 
+  //PSDEBUG
 #ifdef DEBUG
   //    ready=HT.keysPressed();
     //    if (ready != 0) {
@@ -533,7 +555,7 @@ boolean checkWalzes() {
 	  break; // ignore the first 3 clicks
         case B1011: // next click landed
 	  changed = true; // moved up
-          if (settings.currentWalze[i] == sizeof(walzeContent) - 2) {  // index start at 0 and is terminated with \0
+	  if (settings.currentWalze[i] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
             settings.currentWalze[i] = 0;
           } else {
 	    settings.currentWalze[i]++;
@@ -546,7 +568,7 @@ boolean checkWalzes() {
         case B0111: // next click landed
           changed = true; // moved down
           if (settings.currentWalze[i] == 0) {
-            settings.currentWalze[i] = sizeof(walzeContent) - 2; // index start at 0 and is terminated with \0
+	    settings.currentWalze[i] = sizeof(walzeContent)-2;
           } else {
             settings.currentWalze[i]--;
           }
@@ -564,6 +586,9 @@ boolean checkWalzes() {
 /****************************************************************/
 // display something on one of the "wheels"
 // TODO: handle attributes like decimalpoint
+//  rightmost wheel is 4
+//  leftmost is 1 and not avaliable on model M3
+//
 void writeLetter(char letter, uint8_t walze) {
   uint8_t led;
   int8_t i;
@@ -589,7 +614,8 @@ void writeLetter(char letter, uint8_t walze) {
 } // writeLetter
 
 /****************************************************************/
-
+// scroll out message at the speed of "sleep"
+// 
 void writeString(char msg[], uint16_t sleep) {
   uint8_t i;
   for (i = 0; i < strlen(msg); i++) {
@@ -732,10 +758,10 @@ uint8_t checkPlugboard() {
 /****************************************************************/
 // update the wheels
  void updateWheels(){
-   writeLetter(walzeContent[settings.currentWalze[0]],0);
-   writeLetter(walzeContent[settings.currentWalze[1]],1);
+   writeLetter(walzeContent[settings.currentWalze[0]],4);
+   writeLetter(walzeContent[settings.currentWalze[1]],3);
    writeLetter(walzeContent[settings.currentWalze[2]],2);
-   writeLetter(walzeContent[settings.currentWalze[3]],3);
+   writeLetter(walzeContent[settings.currentWalze[3]],1);
  }  //
 
 
@@ -814,7 +840,8 @@ void loop() {
 	writeLetter((-key)%10+'0',4);
       }      
     } else { // no key pressed
-      if ( cnt >2 ){
+      if ( cnt ==2 ){
+	cnt++;
 	updateWheels();
       } else {
 	cnt++;
@@ -824,12 +851,29 @@ void loop() {
     if (HT.keysPressed()==1) {
       if (key==1){
 	led=64;
+	if (settings.currentWalze[2] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
+	  settings.currentWalze[2] = 0;
+	} else {
+	  settings.currentWalze[2]++;
+	}
+	updateWheels();
       } else if (key == 2){
 	led=65;
+	if (settings.currentWalze[1] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
+	  settings.currentWalze[1] = 0;
+	} else {
+	  settings.currentWalze[1]++;
+	}
+	updateWheels();
       } else if (key == 14){
-	led=66;
+	if (settings.currentWalze[0] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
+	  settings.currentWalze[0] = 0;
+	} else {
+	  settings.currentWalze[0]++;
+	}
+	updateWheels();
       }
-      if (key==1 | key==2 | key==14){
+      if (key==1 | key==2){
 	ledOn=led;
 	Serial.print(F("  turning on LED: "));
 	HT.setLedNow(led);

@@ -6,7 +6,19 @@
    If it bugs you - fix it and tell me about it, that's the way I learn.
 
    Copyright: Peter Sjoberg <peters-src AT techwiz DOT ca>
-   License: GPL
+   License: GPLv3
+     This program is free software: you can redistribute it and/or modify
+     it under the terms of the GNU General Public License version 3 as 
+     published by the Free Software Foundation.
+
+     This program is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     GNU General Public License for more details.
+
+     You should have received a copy of the GNU General Public License
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
    Status: Pre Alpha, still adding functions to the code.
 
    History:
@@ -23,6 +35,7 @@ TODO: a lot but some "highligts"...
    Add decimal point
    Add enigma crypto code
    fix so output is more like final version instead of debug mode
+
 
 */
 
@@ -43,7 +56,7 @@ volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 //volatile uint8_t walze[WALZECNT] = {0, 0, 0, 0};
 
-const char walzeContent[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+const char walzeContent[28] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 typedef struct {
   char letter[26];         // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
@@ -342,7 +355,7 @@ void setup() {
     settings.preset = 0; // we can have several saved settings
     settings.model = M3;
     settings.ukw = 1;
-    settings.walze[0] = 3;
+    settings.walze[0] = 3; // wheel type,
     settings.walze[1] = 2;
     settings.walze[2] = 1;
     settings.walze[3] = 0;
@@ -353,10 +366,10 @@ void setup() {
     for (i = 0; i < sizeof(settings.plugboard); i++) {
       settings.plugboard.letter[i]=i;
     }
-    settings.currentWalze[0] = sizeof(walzeContent)-2; // to get space
-    settings.currentWalze[1] = 2;
+    settings.currentWalze[0] = 0; // 0 is space or blank
+    settings.currentWalze[1] = 1; // 1 = "A"
     settings.currentWalze[2] = 1;
-    settings.currentWalze[3] = 0;
+    settings.currentWalze[3] = 1;
     settings.nextlocation=0;
     settings.odometer = 0;
     //    eeprom_update_block((const void*)&settings, (void*)0, sizeof(settings));

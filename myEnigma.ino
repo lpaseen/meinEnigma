@@ -28,13 +28,16 @@
 
 
 TODO: a lot but some "highligts"...
-   Decide what order to count the walze/letters in
-      right or left so the leftmost 4 wheel is wheel #4 
-      or left to right so same wheel is #1 - or maybe #0
    Add switch code
    Add decimal point
    Add enigma crypto code
    fix so output is more like final version instead of debug mode
+
+Decisions:
+   The wheels are numbered left to right since that's the order they are
+   in codebooks and it's the natural order of things when reading left to right.
+   The are numbered 0-1-2-3 so walze/wheel 0 is that extra thin wheel the navy got.
+
 
 
 */
@@ -296,6 +299,7 @@ uint8_t readSettings() {
   return 1; // csum invalid so no valid data
 } // readSettings
 
+/****************************************************************/
 //Some code from http://playground.arduino.cc/Main/PinChangeInterrupt
 //This is tested on an arduino uno and arduino nano, other models may not work
 void pciSetup(uint8_t pin)
@@ -305,9 +309,9 @@ void pciSetup(uint8_t pin)
   PCICR  |= bit (digitalPinToPCICRbit(pin)); // enable interrupt for the group
 }
 
+/****************************************************************/
 //BUG: not much to debounce code!
 // and that seems to be needed, how to do that with interrupts?
-
 void updateEncoderState() {
   uint8_t i, state, state2;
 
@@ -335,6 +339,7 @@ ISR (PCINT0_vect) { // handle pin change interrupt for D8 to D13 here
 } // ISR D8-D13
 
 /****************************************************************/
+/****************************************************************/
 void setup() {
   uint8_t i, j;
   unsigned long ccsum;
@@ -355,10 +360,10 @@ void setup() {
     settings.preset = 0; // we can have several saved settings
     settings.model = M3;
     settings.ukw = 1;
-    settings.walze[0] = 3; // wheel type,
-    settings.walze[1] = 2;
-    settings.walze[2] = 1;
-    settings.walze[3] = 0;
+    settings.walze[0] = 0; // encoder wheel no, leftmost is M4 beta/gamma or 0 for none
+    settings.walze[1] = 1;
+    settings.walze[2] = 2;
+    settings.walze[3] = 3;
     settings.ringstellung[0] = 0;
     settings.ringstellung[1] = 0;
     settings.ringstellung[2] = 0;
@@ -599,8 +604,8 @@ boolean checkWalzes() {
 /****************************************************************/
 // display something on one of the "wheels"
 // TODO: handle attributes like decimalpoint
-//  rightmost wheel is 4
-//  leftmost is 1 and not avaliable on model M3
+//  rightmost wheel is 3
+//  leftmost is 0 and not avaliable on model M3
 //
 void writeLetter(char letter, uint8_t walze) {
   uint8_t led;
@@ -614,7 +619,7 @@ void writeLetter(char letter, uint8_t walze) {
   Serial.println(letter,DEC);
 #endif
 
-  led = (walze - 1) * 16;
+  led = (walze) * 16;
   val = fontTable[letter - 32]; // A= 0b1111001111000000 - 0xF3C0
   for (i = 15; i >= 0; i--) {
     if (val & (1 << i)) {
@@ -632,15 +637,15 @@ void writeLetter(char letter, uint8_t walze) {
 void writeString(char msg[], uint16_t sleep) {
   uint8_t i;
   for (i = 0; i < strlen(msg); i++) {
-    writeLetter(msg[i], 4);
+    writeLetter(msg[i], 3);
     if (i > 0) {
-      writeLetter(msg[i - 1], 3);
+      writeLetter(msg[i - 1], 2);
     }
     if (i > 1) {
-      writeLetter(msg[i - 2], 2);
+      writeLetter(msg[i - 2], 1);
     }
     if (i > 2) {
-      writeLetter(msg[i - 3], 1);
+      writeLetter(msg[i - 3], 0);
     }
     delay(sleep);
   }
@@ -771,10 +776,10 @@ uint8_t checkPlugboard() {
 /****************************************************************/
 // update the wheels
  void updateWheels(){
-   writeLetter(walzeContent[settings.currentWalze[0]],4);
-   writeLetter(walzeContent[settings.currentWalze[1]],3);
+   writeLetter(walzeContent[settings.currentWalze[0]],0);
+   writeLetter(walzeContent[settings.currentWalze[1]],1);
    writeLetter(walzeContent[settings.currentWalze[2]],2);
-   writeLetter(walzeContent[settings.currentWalze[3]],1);
+   writeLetter(walzeContent[settings.currentWalze[3]],3);
  }  //
 
 
@@ -829,28 +834,28 @@ void loop() {
       cnt=0;
       Serial.print(F("Key pressed: "));
       Serial.println(key);
-      writeLetter(' ',1);
+      writeLetter(' ',0);
 
       if (key < -10){
-	writeLetter('-',2);
+	writeLetter('-',1);
       } else {
-	writeLetter(' ',2);
+	writeLetter(' ',1);
       }
 
       if (key>=10 ){
-         writeLetter(int(key/10)+'0',3);
+         writeLetter(int(key/10)+'0',2);
       } else if (key <= -10 ){
-	writeLetter(int((-key)/10)+'0',3);
+	writeLetter(int((-key)/10)+'0',2);
       } else if (key < 0 ){
-	writeLetter('-',3);
+	writeLetter('-',2);
       } else {
-         writeLetter(' ',3);
+         writeLetter(' ',2);
       }
 
       if (key >= 0 ){
-	writeLetter(key%10+'0',4);
+	writeLetter(key%10+'0',3);
       } else {
-	writeLetter((-key)%10+'0',4);
+	writeLetter((-key)%10+'0',3);
       }      
     } else { // no key pressed
       if ( cnt ==2 ){
@@ -864,25 +869,25 @@ void loop() {
     if (HT.keysPressed()==1) {
       if (key==1){
 	led=64;
-	if (settings.currentWalze[2] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
-	  settings.currentWalze[2] = 0;
-	} else {
-	  settings.currentWalze[2]++;
-	}
-	updateWheels();
-      } else if (key == 2){
-	led=65;
 	if (settings.currentWalze[1] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
 	  settings.currentWalze[1] = 0;
 	} else {
 	  settings.currentWalze[1]++;
 	}
 	updateWheels();
-      } else if (key == 14){
-	if (settings.currentWalze[0] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
-	  settings.currentWalze[0] = 0;
+      } else if (key == 2){
+	led=65;
+	if (settings.currentWalze[2] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
+	  settings.currentWalze[2] = 0;
 	} else {
-	  settings.currentWalze[0]++;
+	  settings.currentWalze[2]++;
+	}
+	updateWheels();
+      } else if (key == 14){
+	if (settings.currentWalze[3] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
+	  settings.currentWalze[3] = 0;
+	} else {
+	  settings.currentWalze[3]++;
 	}
 	updateWheels();
       }

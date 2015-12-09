@@ -443,15 +443,19 @@ void setup() {
   i2c_write2(mcp_address,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
   i2c_write2(mcp_address,IODIRA,0xff); // Set all ports to inputs
   i2c_write2(mcp_address,IODIRB,0xff); // Set all ports to inputs
-  i2c_write2(mcp_address,GPPUA,0); // disable pullup (for now,to save power)
-  i2c_write2(mcp_address,GPPUB,0); //
+  //  i2c_write2(mcp_address,GPPUA,0); // disable pullup (for now,to save power)
+  //  i2c_write2(mcp_address,GPPUB,0); //
+  i2c_write2(mcp_address,GPPUA,0xff); // enable pullup, seems to sometimes be a problem otherwise
+  i2c_write2(mcp_address,GPPUB,0xff); //
 
   //The other chip
   i2c_write2(mcp_address+1,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
   i2c_write2(mcp_address+1,IODIRA,0xff); // Set all ports to inputs
   i2c_write2(mcp_address+1,IODIRB,0xff); // Set all ports to inputs
-  i2c_write2(mcp_address+1,GPPUA,0); // disable pullup (for now,to save power)
-  i2c_write2(mcp_address+1,GPPUB,0); //
+  //  i2c_write2(mcp_address+1,GPPUA,0); // disable pullup (for now,to save power)
+  //  i2c_write2(mcp_address+1,GPPUB,0); //
+  i2c_write2(mcp_address+1,GPPUA,0xff); // enable pullup, seems to sometimes be a problem otherwise
+  i2c_write2(mcp_address+1,GPPUB,0xff); //
 
   HT.begin(0x00);
 
@@ -663,10 +667,11 @@ uint8_t checkPlugboard() {
   //      look right declare plugboard not connected.
 
   // make all io ports inputs-pullup
-  i2c_write2(mcp_address,GPPUA,0xff); // enable 100k pullup
-  i2c_write2(mcp_address,GPPUB,0xff); //
-  i2c_write2(mcp_address+1,GPPUA,0xff); // enable 100k pullup
-  i2c_write2(mcp_address+1,GPPUB,0xff); //
+  //Already done, have problem with it sometimes getting false hits and lack of pullup might be it
+  //  i2c_write2(mcp_address,GPPUA,0xff); // enable 100k pullup
+  //  i2c_write2(mcp_address,GPPUB,0xff); //
+  //  i2c_write2(mcp_address+1,GPPUA,0xff); // enable 100k pullup
+  //  i2c_write2(mcp_address+1,GPPUB,0xff); //
 
   for (i = 0; i < sizeof(newplugboard); i++) {
     newplugboard.letter[i]=i;
@@ -742,13 +747,13 @@ uint8_t checkPlugboard() {
     //make port input again
     i2c_write2(mcp,GPIOA+port,0xff);
     i2c_write2(mcp,IODIRA+port,0xff);
-    //    i2c_write2(mcp,GPPUA+port,0xff);
   }
   // disable all pullups to save power
-  i2c_write2(mcp_address,GPPUA,0);
-  i2c_write2(mcp_address,GPPUB,0);
-  i2c_write2(mcp_address+1,GPPUA,0);
-  i2c_write2(mcp_address+1,GPPUB,0);
+  //Leave them on
+  //  i2c_write2(mcp_address,GPPUA,0);
+  //  i2c_write2(mcp_address,GPPUB,0);
+  //  i2c_write2(mcp_address+1,GPPUA,0);
+  //  i2c_write2(mcp_address+1,GPPUB,0);
 
   if (memcmp(newplugboard.letter, settings.plugboard.letter, sizeof(settings.plugboard)) != 0){
     //    memcpy(settings.plugboard, newplugboard,sizeof(settings.plugboard));

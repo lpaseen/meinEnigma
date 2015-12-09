@@ -96,6 +96,7 @@ typedef struct {
   uint8_t fwVersion;         // firmware version
   uint8_t preset;            // Allow multiple saved settings
   enigmaModel_t model;
+  uint8_t ekw;               // entry walze, always 1 for military enigma.
   uint8_t ukw;               // what reflector that is loaded
   uint8_t walze[WALZECNT];          // what wheel that currently is in the 3 or 4 positions
   char ringstellung[WALZECNT];      // Setting of the wheel ring.
@@ -359,15 +360,16 @@ void setup() {
     settings.fwVersion = VERSION;
     settings.preset = 0; // we can have several saved settings
     settings.model = M3;
-    settings.ukw = 1;
+    settings.ekw = 1; // Entry walze
+    settings.ukw = 1; // reflector
     settings.walze[0] = 0; // encoder wheel no, leftmost is M4 beta/gamma or 0 for none
     settings.walze[1] = 1;
     settings.walze[2] = 2;
     settings.walze[3] = 3;
     settings.ringstellung[0] = 0;
-    settings.ringstellung[1] = 0;
-    settings.ringstellung[2] = 0;
-    settings.ringstellung[3] = 0;
+    settings.ringstellung[1] = 1;
+    settings.ringstellung[2] = 1;
+    settings.ringstellung[3] = 1;
     for (i = 0; i < sizeof(settings.plugboard); i++) {
       settings.plugboard.letter[i]=i;
     }
@@ -402,24 +404,22 @@ void setup() {
       Serial.println(settings.model,DEC);
   }
 
+  Serial.print(F("entry wheel: "));
+  Serial.println(settings.ekw, DEC);
   Serial.print(F("reflector: "));
   Serial.println(settings.ukw, DEC);
   Serial.print(F("Wheels: "));
-  Serial.print(settings.walze[0], DEC);
-  Serial.print(F(" "));
-  Serial.print(settings.walze[1], DEC);
-  Serial.print(F(" "));
-  Serial.print(settings.walze[2], DEC);
-  Serial.print(F(" "));
-  Serial.println(settings.walze[3], DEC);
+  for (i=0;i<WALZECNT;i++){
+    Serial.print(settings.walze[i], DEC);
+    Serial.print(F(" "));
+  }
+  Serial.println();
   Serial.print(F("ringstellung: "));
-  Serial.print(walzeContent[settings.ringstellung[0]]);
-  Serial.print(F(" "));
-  Serial.print(walzeContent[settings.ringstellung[1]]);
-  Serial.print(F(" "));
-  Serial.print(walzeContent[settings.ringstellung[2]]);
-  Serial.print(F(" "));
-  Serial.println(walzeContent[settings.ringstellung[3]]);
+  for (i=0;i<WALZECNT;i++){
+    Serial.print(walzeContent[settings.ringstellung[i]]);
+    Serial.print(F(" "));
+  }
+  Serial.println();
   Serial.println(F("Plugboard (Steckerbrett): "));
   for (i = 0; i < sizeof(settings.plugboard); i++) {
     if (settings.plugboard.letter[i] != i) {
@@ -430,13 +430,11 @@ void setup() {
     }
   }
   Serial.print(F("currentWalze: "));
-  Serial.print(walzeContent[settings.currentWalze[0]]);
-  Serial.print(F(" "));
-  Serial.print(walzeContent[settings.currentWalze[1]]);
-  Serial.print(F(" "));
-  Serial.print(walzeContent[settings.currentWalze[2]]);
-  Serial.print(F(" "));
-  Serial.println(walzeContent[settings.currentWalze[3]]);
+  for (i=0;i<WALZECNT;i++){
+    Serial.print(walzeContent[settings.currentWalze[i]]);
+    Serial.print(F(" "));
+  }
+  Serial.println();
   Serial.print(F("Odo meter: "));
   Serial.println(settings.odometer, DEC);
 

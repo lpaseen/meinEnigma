@@ -98,8 +98,8 @@ typedef struct {
   uint8_t fwVersion;         // firmware version
   uint8_t preset;            // Allow multiple saved settings
   enigmaModel_t model;
-  uint8_t ekw;               // entry walze, always 1 for military enigma.
-  uint8_t ukw;               // what reflector that is loaded
+  uint8_t ekw;               // Eintrittswalze - entry wheel, always 1 for military enigma.
+  uint8_t ukw;               // Umkehrwalze - what reflector that is loaded
   uint8_t walze[WALZECNT];     // what wheel that currently is in the 3 or 4 positions
   char ringstellung[WALZECNT]; // Setting of the wheel ring, left to right, 0-sizeof(walzeContent)-2 not the letters!
   letters_t plugboard;

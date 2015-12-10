@@ -47,6 +47,7 @@ Decisions:
 #include <EEPROM.h>
 #include <util/crc16.h>
 #include <Wire.h>
+#include <avr/pgmspace.h>  // needed for PROGMEM
 
 //Define the input pin for each of the 4 wheel encoders
 //[wheel] [low, high]
@@ -88,9 +89,10 @@ typedef enum {M3,M4} enigmaModel_t;
 // rotor/wheel = walze
 // Entry wheel = Eintrittswalze (EKW), static
 // Reflector   = Umkehrwalze (UKW)
-// wheels are counted from right to left so
-//  rightmost wheel is 0
-//  leftmost wheel is 3 and not available on M3
+// wheels are counted from left to right
+//  rightmost wheel is 3
+//  leftmost wheel is 0 and not available on M3
+//
 
 typedef struct {
   uint8_t fwVersion;         // firmware version
@@ -98,11 +100,12 @@ typedef struct {
   enigmaModel_t model;
   uint8_t ekw;               // entry walze, always 1 for military enigma.
   uint8_t ukw;               // what reflector that is loaded
-  uint8_t walze[WALZECNT];          // what wheel that currently is in the 3 or 4 positions
-  char ringstellung[WALZECNT];      // Setting of the wheel ring.
+  uint8_t walze[WALZECNT];     // what wheel that currently is in the 3 or 4 positions
+  char ringstellung[WALZECNT]; // Setting of the wheel ring, left to right, 0-sizeof(walzeContent)-2 not the letters!
   letters_t plugboard;
-  unsigned long odometer;    // How many characters this unit has en/decrypted
-  char currentWalze[WALZECNT];   // current position of the wheel, 0-sizeof(walzeContent)-2 not the letters!
+  unsigned long odometer;      // How many characters this unit has en/decrypted
+  char currentWalze[WALZECNT]; // current position of the wheel, 0-sizeof(walzeContent)-2 not the letters!
+  uint8_t dp;		       // bitmapped decimal point, bit0=1 means dp on for leftmost(0) wheel
   unsigned int nextlocation; // start for next section in eeprom
   boolean valid;             // whatever this section is valid or not
   unsigned int checksum;
@@ -150,12 +153,17 @@ HT16K33::KEYDATA keys;
 //The order the keys on the keyboard are coded
 //Keyboard scancode table
 //A-Z for keyboard, 1-9 for buttons
-const char scancodes[] = "QWERTZUIOASDFGHJKPYXCVBNML123456789";
+static const char scancodes[] = "QWERTZUIOASDFGHJKPYXCVBNML123456789";
 
 //A=65 so the [0] element contain the number of the LED that shows "A"
 //after 'Z'-65 comes control LEDs [\]^_
 //Usage: led['A'-65] or led[char-65]
-const byte led[] = {16, 22, 4, 17, 19, 25, 20, 8, 14, 0, 18, 3, 5, 6, 7, 9, 10, 15, 24, 23, 2, 21, 1, 13, 12, 11, 26, 27, 28, 29, 30};
+static const byte led[] = {16, 22, 4, 17, 19, 25, 20, 8, 14, 0, 18, 3, 5, 6, 7, 9, 10, 15, 24, 23, 2, 21, 1, 13, 12, 11, 26, 27, 28, 29, 30};
+
+//Decimal points are handled outside the ht16k33 (not enough wires).
+//they are wired to io pins on the arduino and then some hardware that is in between will light up the correct led at the right moment
+
+static const uint8_t PROGMEM dp[] = {10,11,12,13};
 
 /****************************************************************/
 // Write a single byte
@@ -497,55 +505,55 @@ uint8_t checkKB() {
   uint8_t i,keyflag;
   int8_t key;
   HT16K33::KEYDATA oldkeys;
-  
 
   //PSDEBUG
 #ifdef DEBUG
   //    ready=HT.keysPressed();
-    //    if (ready != 0) {
-      HT.readKeyRaw(oldkeys,false); // false to go from cache - what was read above
-      key=HT.readKey(); // this will update cache but also clear the chip mem, "true" to ignore other keys
-      HT.readKeyRaw(keys,false); // false to go from cache - what was read above
-    if (key != 0) {
-      Serial.print(F(" "));
-      for (i = 0; i < 3; i++) {
-	if (oldkeys[i] < 0x1000) {
-	  Serial.print(F("0"));
-	}
-	if (oldkeys[i] < 0x100)  {
-	  Serial.print(F("0"));
-	}
-	if (oldkeys[i] < 0x10)   {
-	  Serial.print(F("0"));
-	}
-	Serial.print(oldkeys[i], HEX);
-	Serial.print(F(" "));
+  //    if (ready != 0) {
+  HT.readKeyRaw(oldkeys,false); // false to go from cache - what was read above
+  key=HT.readKey(); // this will update cache but also clear the chip mem, "true" to ignore other keys
+  HT.readKeyRaw(keys,false); // false to go from cache - what was read above
+  if (key != 0) {
+    Serial.print(F(" "));
+    for (i = 0; i < 3; i++) {
+      if (oldkeys[i] < 0x1000) {
+	Serial.print(F("0"));
       }
-      Serial.println();
+      if (oldkeys[i] < 0x100)  {
+	Serial.print(F("0"));
+      }
+      if (oldkeys[i] < 0x10)   {
+	Serial.print(F("0"));
+      }
+      Serial.print(oldkeys[i], HEX);
+      Serial.print(F(" "));
+    }
+    Serial.println();
 
-      Serial.print(F(" "));
-      for (i = 0; i < 3; i++) {
-	if (keys[i] < 0x1000) {
-	  Serial.print(F("0"));
-	}
-	if (keys[i] < 0x100)  {
-	  Serial.print(F("0"));
-	}
-	if (keys[i] < 0x10)   {
-	  Serial.print(F("0"));
-	}
-	Serial.print(keys[i], HEX);
-	Serial.print(F(" "));
+    Serial.print(F(" "));
+    for (i = 0; i < 3; i++) {
+      if (keys[i] < 0x1000) {
+	Serial.print(F("0"));
       }
-      Serial.println();
-      Serial.print(F(", keyReady is: "));
-      Serial.print(ready);
-      Serial.print(F("  readkey is: "));
-      Serial.print(key);
-      Serial.println();
-      return key;
+      if (keys[i] < 0x100)  {
+	Serial.print(F("0"));
+      }
+      if (keys[i] < 0x10)   {
+	Serial.print(F("0"));
+      }
+      Serial.print(keys[i], HEX);
+      Serial.print(F(" "));
+    }
+    Serial.println();
+    Serial.print(F(", keyReady is: "));
+    Serial.print(ready);
+    Serial.print(F("  readkey is: "));
+    Serial.print(key);
+    Serial.println();
+    return key;
+  }
 #else
-      //  if (HT.keyReady() != 0) {
+    //  if (HT.keyReady() != 0) {
     return HT.readKey();
     //  }
 #endif
@@ -604,6 +612,28 @@ boolean checkWalzes() {
 } // checkWalzes
 
 /****************************************************************/
+// Turn on/off decimal point
+// 
+void decimalPoint(uint8_t dp, boolean state) {
+   int i;
+
+   //The way it works is reversed
+   // if the bit is _cleared_ the dp is on
+   // if the bit is _set_ the dp is off
+   if (state){
+     bitClear(settings.dp,dp);
+   }else{
+     bitSet(settings.dp,dp);
+   }
+   for (i=0;i<WALZECNT;i++){
+     //     digitalWrite(dp[i],bitRead(settings.dp,i));
+     //     digitalWrite(dp[i],HIGH);
+     //     digitalWrite(pgm_read_byte(&dp[i]),HIGH);
+     digitalWrite(pgm_read_byte(dp+i),bitRead(settings.dp,i));
+   }
+} // decimalPoint
+
+/****************************************************************/
 // display something on one of the "wheels"
 // TODO: handle attributes like decimalpoint
 //  rightmost wheel is 3
@@ -623,6 +653,7 @@ void writeLetter(char letter, uint8_t walze) {
 
   led = (walze) * 16;
   val = fontTable[letter - 32]; // A= 0b1111001111000000 - 0xF3C0
+  // Maybe do this as write two bytes instead if 16 bits
   for (i = 15; i >= 0; i--) {
     if (val & (1 << i)) {
       HT.setLed(led + i);
@@ -809,8 +840,6 @@ void loop() {
   digitalWrite(11,HIGH);
   writeString("    ",0);
 
-  i=HIGH; // PSDEBUG: for heartbeat
-
   Serial.println();
   Serial.println("waiting");
 
@@ -825,6 +854,12 @@ void loop() {
 
 
   updateWheels();
+
+  byte hb=0; // PSDEBUG
+  decimalPoint(0,true);
+  decimalPoint(1,true);
+  decimalPoint(2,true);
+  decimalPoint(3,true);
 
   while (true) {
     if (checkWalzes()){
@@ -877,6 +912,7 @@ void loop() {
 	} else {
 	  settings.currentWalze[1]++;
 	}
+	decimalPoint(1,true);
 	updateWheels();
       } else if (key == 2){
 	led=65;
@@ -885,6 +921,7 @@ void loop() {
 	} else {
 	  settings.currentWalze[2]++;
 	}
+	decimalPoint(2,true);
 	updateWheels();
       } else if (key == 14){
 	if (settings.currentWalze[3] == sizeof(walzeContent)-2) {  // index start at 0 and is terminated with \0
@@ -892,6 +929,7 @@ void loop() {
 	} else {
 	  settings.currentWalze[3]++;
 	}
+	decimalPoint(3,true);
 	updateWheels();
       }
       if (key==1 | key==2){
@@ -905,6 +943,10 @@ void loop() {
     if (HT.keysPressed()!=1){
       if (ledOn!=0){
 	Serial.print(F("  turning off LED: "));
+	decimalPoint(0,false);
+	decimalPoint(1,false);
+	decimalPoint(2,false);
+	decimalPoint(3,false);
 	HT.clearLedNow(led);
 	Serial.println(led);
 	ledOn=0;
@@ -931,9 +973,6 @@ void loop() {
       Serial.println(HT.keysPressed());
 #endif
     }
-    //PSDEBUG: heartbeat
-    i=!i;
-    digitalWrite(13,i);
     delay(200);
   }
 } // loop

@@ -82,7 +82,11 @@ typedef enum {M3,M4} enigmaModel_t;
 
 //TODO: 
 // Add something so we can have several presets in memory and then change between them
-
+//  settings.preset is a preset number. the non active ones are +100
+//  so if the active one is 1 and 2 is inactive we have two saved in eeprom
+//  one with preset=1 and one with preset=102
+//  this schema allows 100 (0-99) preset profiles which means we run out of eeprom space before we run out of profiles.
+//
 // EEPROM structure version - to be able to handle upgrades
 #define VERSION 0
 
@@ -96,7 +100,7 @@ typedef enum {M3,M4} enigmaModel_t;
 
 typedef struct {
   uint8_t fwVersion;         // firmware version
-  uint8_t preset;            // Allow multiple saved settings
+  uint8_t preset;            // preset no, allows multiple saved settings, inactive ones are +100
   enigmaModel_t model;
   uint8_t ekw;               // Eintrittswalze - entry wheel, always 1 for military enigma.
   uint8_t ukw;               // Umkehrwalze - what reflector that is loaded

@@ -107,14 +107,14 @@ typedef struct {
   uint8_t walze[WALZECNT];     // what wheel that currently is in the 3 or 4 positions
   char ringstellung[WALZECNT]; // Setting of the wheel ring, left to right, 0-sizeof(walzeContent)-2 not the letters!
   letters_t plugboard;
-  unsigned long odometer;      // How many characters this unit has en/decrypted
   char currentWalze[WALZECNT]; // current position of the wheel, 0-sizeof(walzeContent)-2 not the letters!
-  uint8_t dp;		       // bitmapped decimal point, bit0=1 means dp on for leftmost(0) wheel
+  uint8_t dp;		       // bitmapped decimal point, bit0=1 means dp on for leftmost(0) wheel (should probably be outside eeprom settings)
+  unsigned long odometer;      // How many characters this unit has en/decrypted
   unsigned int nextlocation; // start for next section in eeprom
   boolean valid;             // whatever this section is valid or not
   unsigned int checksum;
 } machineSettings_t;
-// "nextLocation" and "valid" is used to cycle the eeprom writing location
+// "nextLocation" and "valid" are used to cycle the eeprom writing location
 
 machineSettings_t settings;
 
@@ -243,8 +243,9 @@ unsigned int getCsum(void *block, uint8_t size) {
 
 /****************************************************************/
 // save the settings to eeprom
-// use some trix of moving the save location across the eeprom to not 
-// always write in one spot
+// use some trix of moving the save location across the eeprom to
+// not always write in one spot
+// BUG: need to handle presets so it doesn't overwrite valid ones as it moves around
 void saveSettings() {
   machineSettings_t eesettings;
   uint8_t i;
@@ -283,29 +284,57 @@ void saveSettings() {
 // read the settings from eeprom
 // we use some trix of moving the save location across the eeprom to not 
 // always write in one spot and need to follow it if needed
-uint8_t readSettings() {
+// preset are used to allow several settings saved
+uint8_t readSettings(uint8_t preset=255) {
   static uint16_t addr=0;
   unsigned int ccsum;
   unsigned char *ptr = (unsigned char *)&settings;
 
-#ifdef DEBUG
+#ifdef DEBUGs
+  Serial.print("Looking for preset: ");Serial.println(preset);
   Serial.print("readSetting: ccsum=");
 #endif
   //First read from first location
   eeprom_read_block((void*)&settings, (void*)addr, sizeof(settings));
 
   ccsum = getCsum((void*) ptr, sizeof(settings) - 2);
-#ifdef DEBUG
+#ifdef DEBUGs
   Serial.println(ccsum,HEX);
 #endif
   while (ccsum == settings.checksum) { // if valid csum, check if block is valid
-    if (settings.valid){
-      settings.nextlocation=addr;// this is were the valid block is right now
-      return 0;// we got valid data in the global "settings" structure (I hope)
-    } else {
+#ifdef DEBUGs
+    Serial.print(F("Looking at eeprom addr "));Serial.println(addr,HEX);
+#endif
+    if (settings.valid) {
+      if  (preset == 255) {//use first valid
+#ifdef DEBUGs
+	Serial.print(F("found setting preset # "));Serial.println(settings.preset);
+#endif
+	if (settings.preset < 100){ // we got a hit
+	  settings.nextlocation=addr;// this is were the valid block is right now
+	  return 0;// we got valid data in the global "settings" structure (I hope)
+	} // first default setting, if not it will fall through and use next
+      } else { // if use first valid
+	if (settings.preset == preset){ // found it
+	  settings.nextlocation=addr;
+	  return 0;
+	} else if (settings.preset-100 == preset){ // found the right one but it's a different one
+	  // BUG, need to make this the default one - to be fixed after the selection/saving of preset is coded
+	  //  find the current default and add 100 to the preset + save
+	  //  save this with preset -100
+	  settings.preset = preset;
+	  settings.nextlocation=addr;
+	  return 0;
+	}
+      } // if use first valid;else
+    } // if good one
+    // not good enough, try next
+    if ( addr != settings.nextlocation){
       addr=settings.nextlocation;
       eeprom_read_block((void*)&settings, (void*)addr, sizeof(settings));
       ccsum = getCsum((void*) ptr, sizeof(settings) - 2);
+    } else {
+      break; // we are done
     }
   }
   settings.valid=false;
@@ -352,6 +381,28 @@ ISR (PCINT0_vect) { // handle pin change interrupt for D8 to D13 here
 } // ISR D8-D13
 
 /****************************************************************/
+// Turn on/off decimal point
+// 
+void decimalPoint(uint8_t dp, boolean state) {
+   int i;
+
+   //The way it works is reversed
+   // if the bit is _cleared_ the dp is on
+   // if the bit is _set_ the dp is off
+   if (state){
+     bitClear(settings.dp,dp);
+   }else{
+     bitSet(settings.dp,dp);
+   }
+   for (i=0;i<WALZECNT;i++){
+     //     digitalWrite(dp[i],bitRead(settings.dp,i));
+     //     digitalWrite(dp[i],HIGH);
+     //     digitalWrite(pgm_read_byte(&dp[i]),HIGH);
+     digitalWrite(pgm_read_byte(dp+i),bitRead(settings.dp,i));
+   }
+} // decimalPoint
+
+/****************************************************************/
 /****************************************************************/
 void setup() {
   uint8_t i, j;
@@ -389,8 +440,10 @@ void setup() {
     settings.currentWalze[1] = 1; // 1 = "A"
     settings.currentWalze[2] = 1;
     settings.currentWalze[3] = 1;
-    settings.nextlocation=0;
+    settings.dp = 0;
     settings.odometer = 0;
+    settings.nextlocation=0;
+    settings.valid=true;
     //    eeprom_update_block((const void*)&settings, (void*)0, sizeof(settings));
     saveSettings();
   } else {
@@ -401,6 +454,8 @@ void setup() {
 
   Serial.print(F("fwVersion: "));
   Serial.println(settings.fwVersion, HEX);
+  Serial.print(F("preset: "));
+  Serial.println(settings.preset,DEC);
   Serial.print(F("model: "));
   switch (settings.model) {
     case M3:
@@ -447,6 +502,8 @@ void setup() {
     Serial.print(F(" "));
   }
   Serial.println();
+  Serial.print(F("decimal point: "));
+  Serial.println(settings.dp, DEC);
   Serial.print(F("Odo meter: "));
   Serial.println(settings.odometer, DEC);
 
@@ -471,6 +528,13 @@ void setup() {
 
   HT.begin(0x00);
 
+  // Prep decimal point
+  for (i=0;i<WALZECNT;i++){
+    pinMode(pgm_read_byte(dp+i), OUTPUT);
+    //    digitalWrite(pgm_read_byte(dp+i),LOW);
+  }
+
+ 
   // Test the screen
   Serial.println(F("All LEDs on"));
   for (i = 0; i <= 128; i++) {
@@ -478,22 +542,20 @@ void setup() {
     //    HT.sendLed();
   }
   HT.sendLed();
+  for (i=0;i<WALZECNT;i++){
+    decimalPoint(i,true);
+  }
   delay(500);
 
   Serial.println(F("All LEDs OFF"));
   for (i = 0; i <= 128; i++) {
     HT.clearLed(i);
-    //HT.sendLed();
-    //    delay(100);
   }
   HT.sendLed();
-  delay(500);
-
-  // Clear decimal point
-  for (i = 10; i <= 13; i++) {
-    pinMode(i, OUTPUT);
-    digitalWrite(i, HIGH);
+  for (i=0;i<WALZECNT;i++){
+    decimalPoint(i,false);
   }
+  delay(500);
 
   //Setup encoder wheel interrupt
   for (i = 0; i < sizeof(encoderPins); i++) {
@@ -614,28 +676,6 @@ boolean checkWalzes() {
   } // for i in walzecnt
   return changed;
 } // checkWalzes
-
-/****************************************************************/
-// Turn on/off decimal point
-// 
-void decimalPoint(uint8_t dp, boolean state) {
-   int i;
-
-   //The way it works is reversed
-   // if the bit is _cleared_ the dp is on
-   // if the bit is _set_ the dp is off
-   if (state){
-     bitClear(settings.dp,dp);
-   }else{
-     bitSet(settings.dp,dp);
-   }
-   for (i=0;i<WALZECNT;i++){
-     //     digitalWrite(dp[i],bitRead(settings.dp,i));
-     //     digitalWrite(dp[i],HIGH);
-     //     digitalWrite(pgm_read_byte(&dp[i]),HIGH);
-     digitalWrite(pgm_read_byte(dp+i),bitRead(settings.dp,i));
-   }
-} // decimalPoint
 
 /****************************************************************/
 // display something on one of the "wheels"
@@ -831,17 +871,12 @@ void loop() {
   char j;
   char hello[] = "ENIGMA";
 
-  pinMode(11, OUTPUT);
-  digitalWrite(11, HIGH);
-
-//  writeString("HELLO WORLD    ", 400);
-
-  writeString(hello, 400);
+  writeString(hello, 200);
   delay(500);
   writeString("V002",0);
-  digitalWrite(11,LOW);
-  delay(1000);
-  digitalWrite(11,HIGH);
+  decimalPoint(1,true);
+  delay(2000);
+  decimalPoint(1,false);
   writeString("    ",0);
 
   Serial.println();
@@ -858,12 +893,6 @@ void loop() {
 
 
   updateWheels();
-
-  byte hb=0; // PSDEBUG
-  decimalPoint(0,true);
-  decimalPoint(1,true);
-  decimalPoint(2,true);
-  decimalPoint(3,true);
 
   while (true) {
     if (checkWalzes()){

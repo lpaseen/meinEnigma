@@ -114,6 +114,7 @@ static const uint8_t morsecode[] PROGMEM={
   0b00001100,// Z
 };
 #define spkPin 11
+//#define SPK // Speaker/Piezo or simple BEEP thingy
 
 //toneFq and timeBase as variabes so they can be changed in sw later
 uint8_t toneFq; // tone frequenze/100 so 1khz = 10 and 20khz=200
@@ -1623,7 +1624,11 @@ void setup() {
 
   //for morsecode
   pinMode(spkPin,OUTPUT);
-  noTone(spkPin);
+#ifdef SPK
+    noTone(spkPin);
+#else
+    digitalWrite(spkPin,LOW);
+#endif
   timeBase=90; // ms to base everything off
   toneFq=15; // 1.5khz
 
@@ -2998,7 +3003,11 @@ void sendLetter(char ch){
   }
 
   while (i<7){ // now start sending the code
+#ifdef SPK
     tone(spkPin,toneFq*100);
+#else
+    digitalWrite(spkPin,HIGH);
+#endif
     if ((ch & 0b1000000)==0){
       //      Serial.print(".");
       delay(timeDitt);
@@ -3006,7 +3015,11 @@ void sendLetter(char ch){
       //      Serial.print("-");
       delay(timeDah);
     }
+#ifdef SPK
     noTone(spkPin);
+#else
+    digitalWrite(spkPin,LOW);
+#endif
     delay(timePart);
     ch=ch<<1;
     i++;
@@ -3248,14 +3261,14 @@ void loop() {
 	  Serial.print(F("morsecode "));
 	  if (settings.morseCode){
 	    Serial.println(F("OFF"));
-	    sendLetter('O');
-	    sendLetter('F');
+	    sendLetter('O');delay(timeLetter);
+	    sendLetter('F');delay(timeLetter);
 	    sendLetter('F');
 	    settings.morseCode=false;
 	  }else{
 	    Serial.println(F("ON"));
 	    settings.morseCode=true;
-	    sendLetter('O');
+	    sendLetter('O');delay(timeLetter);
 	    sendLetter('N');
 	  }
 	  break;

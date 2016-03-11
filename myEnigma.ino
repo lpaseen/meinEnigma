@@ -1444,7 +1444,7 @@ void setup() {
   unsigned long ccsum;
   char strBuffer[]="PR X";
 
-    Serial.begin(115200);
+  Serial.begin(115200);
   //  Serial.begin(19200);
   Serial.println(F("My enigma v0.05"));
   Serial.println();
@@ -1760,32 +1760,9 @@ void updateRingStellung(uint8_t wheelNo,uint8_t prevCurrent){
 #else
     key=lastKey; // the main loop collect keys
 #endif
-#ifdef DEBUGUR
-    Serial.print(F(" Key= "));
-    Serial.println(key);
-#endif
     if (key!=0){
-#ifdef DEBUGUR
-      Serial.print(F(" Key pressed: "));
-      Serial.print(key);
-      Serial.print(F(" -> "));
-      if (key<0){
-	Serial.println((char)pgm_read_byte(&scancodes[0]+(-key)-1));
-      } else {
-	Serial.println((char)pgm_read_byte(&scancodes[0]+key-1));
-      }
-#endif
-
       if ((key-27) == wheelNo){
-#ifdef DEBUGUR
-	Serial.print(F("Ringstellung changed from "));
-	Serial.print(settings.ringstellung[wheelNo]);
-#endif
 	settings.ringstellung[wheelNo]=settings.currentWalze[wheelNo];
-#ifdef DEBUGUR
-	Serial.print(F(" to "));
-	Serial.println(settings.ringstellung[wheelNo]);
-#endif
       }// if key-27==i
     } // if key pressed
   } // if at ringstellung
@@ -1931,13 +1908,13 @@ boolean checkWalzes() {
 	case B11: // if current is 11 prev can't be 11 also
 	  break;
 	case B10:
-	  changed = true; // moved down
-	  direction = down;
+	  changed = true;
+	  direction = up;
 	  break;
 	  
 	case B01:
-	  changed = true; // moved up
-	  direction = up;
+	  changed = true;
+	  direction = down;
 	  break;
 	} // switch
       } // if current state is bottom of the click 
@@ -1981,13 +1958,13 @@ boolean checkWalzes() {
 		pbpairs[pbpos][0]=' ';
 		pbpairs[pbpos][1]=' ';
 	      }
-	      if (direction==down){
+	      if (direction==up){
 		if (pbpos==0){
 		  pbpos=12;
 		}else{
 		  pbpos--;
 		}
-	      }else{ //dir==up
+	      }else{ //if dir==up
 		if (pbpos==12){
 		  pbpos=0;
 		}else{
@@ -1999,7 +1976,7 @@ boolean checkWalzes() {
 	      //BUG: - should accept keys also
 	      //BUG:? - should flash the letters on the lampboard as they are active
 
-	      if (direction==down){
+	      if (direction==up){
 		do {
 		  if ( pbpairs[pbpos][walzeNo-2]==' ' || pbpairs[pbpos][walzeNo-2] == 'A'){
 		    pbpairs[pbpos][walzeNo-2]='Z';

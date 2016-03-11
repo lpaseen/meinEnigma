@@ -64,7 +64,9 @@
  *	<s>Shorten the startup, changes so when in "model" mode pressing keys shows info
  *	<s>  like "v" for version, "o" for odometer and so on.
  *	<s?>when pressing multiple keys fast it sometimes doesn't clear all LEDs properly
- *	when changing mode from run to plug and back virtual plugboard settings is lost
+ *	Running standalone is a problem with the switch on A6 changing all the time
+ *	Running without plugboard doesn't show virtual plugboard in printSetting
+ *	when setting virtual plugboard on physical config AA is possible
  *
  *Milestone:
  *	Need to check direction of all parts in checkWalze
@@ -1444,8 +1446,7 @@ void setup() {
   unsigned long ccsum;
   char strBuffer[]="PR X";
 
-  Serial.begin(115200);
-  //  Serial.begin(19200);
+  Serial.begin(38400);
   Serial.println(F("My enigma v0.05"));
   Serial.println();
 
@@ -1476,7 +1477,6 @@ void setup() {
   }
 
   copyEnigmaModel(settings.model);
-  printSettings();
 
   Wire.begin(); // enable the wire lib
 
@@ -1613,7 +1613,6 @@ void setup() {
       Serial.println((char)i+1);
       strBuffer[3]=i+1;
       displayString(strBuffer, 200);
-      printSettings();
       delay(2000);
     } // if 0-3
   } // if key>0
@@ -1621,6 +1620,7 @@ void setup() {
   checkSwitchPos();
   displayWalzes();
   logLevel=0;
+  printSettings();
 
   //for morsecode
   pinMode(spkPin,OUTPUT);

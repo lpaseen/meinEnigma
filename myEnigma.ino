@@ -65,6 +65,7 @@
  *	<s>  like "v" for version, "o" for odometer and so on.
  *	<s?>when pressing multiple keys fast it sometimes doesn't clear all LEDs properly
  *	Running standalone is a problem with the switch on A6 changing all the time
+ *		check if standalone, turn on a few leds and see if they are on with getLed
  *	Running without plugboard doesn't show virtual plugboard in printSetting
  *	when setting virtual plugboard on physical config AA is possible
  *
@@ -165,7 +166,7 @@ volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 #define SwitchPos5 (maxADCval/((SwitchPositions-1)*2))*9  // "model" - select what enigma model, leftmost pos
 //6, OFF - leftmost position, powered off
 
-enum operationMode_t {run,plugboard,rotortype,ukw,model} operationMode;
+enum operationMode_t {run,plugboard,rotortype,ukw,model,none} operationMode;
 //Serial input stuff, arduino serial input buffer is 64 bytes
 //max allowed msg lengh is 250 characters plus some spaces = 300
 //Tried to make this buffer larger hoping to be able to capture long strings but it's still issues
@@ -549,6 +550,7 @@ machineSettings_t settings; // current settings and also what is saved in eeprom
 enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;
+boolean standalone=false;	// If standalone (no hardware, just serialAPI)
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
 uint8_t lastKey; // last key pressed, needed to pass the info between subroutines
@@ -603,7 +605,6 @@ const char scancodes[] PROGMEM = "OIUZTREWQGHJKLMNBVCXYPASDF0123";
 //after 'Z'-65 comes control LEDs [\]^_
 //Usage: led['A'-65] or led[char-65]
 //	pgm_read_byte(led+'A'-65));
-//const byte led[] PROGMEM = {76,86,88,78,73,79,92,93,68,94,95,83,84,85,67,91,75,72,77,71,69,87,74,89,90,70};
 const byte led[] PROGMEM = {12,22,24,14,9,15,28,29,4,30,31,19,20,21,3,27,11,8,13,7,5,23,10,25,26,6};
 //  Q   W   E   R   T   Z   U   I   O
 // 75  74  73  72  71  70  69  68  67
@@ -1320,12 +1321,19 @@ uint8_t checkKB() {
 // you turn it on next time it will be same as when you turned it off. It is not
 // saved after each keypress since then you wear out the eeprom prematurely.
 //
-uint8_t checkSwitchPos(){
+void checkSwitchPos(){
   uint16_t adcval;
   uint8_t i,j;
   operationMode_t newMode;
   const __FlashStringHelper  *newModeTxt;
   boolean allGood;
+
+  if (standalone){ // if standalone pretend it's always in run mode
+    if (operationMode!=run)
+      printSettings();
+    operationMode=run;
+    return;
+  }
 
   adcval=analogRead(Switch);delay(1);//set internal arduino mux to position "Switch" and wait 1ms for value to stabalize
   adcval=analogRead(Switch); // get the value
@@ -1515,9 +1523,8 @@ void setup() {
  
   // Test the screen
   Serial.println(F("All LEDs on"));
-  for (i = 0; i < 128; i++) {
-    HT.setLed(i);
-  }
+  for (i=0;i<sizeof(HT.displayRam);i++)
+    HT.displayRam[i]=0xff;
   HT.sendLed();
   // including all decimal points
   for (i=0;i<WALZECNT;i++){
@@ -1532,13 +1539,51 @@ void setup() {
   }
 
   Serial.println(F("All LEDs OFF"));
-  for (i = 0; i < 128; i++) {
-    HT.clearLed(i);
-  }
+  for (i=0;i<sizeof(HT.displayRam);i++)
+    HT.displayRam[i]=0;
   HT.sendLed();
   for (i=0;i<WALZECNT;i++){
     decimalPoint(i,false);
   }
+
+  //real lights are only 0-31 and 64-127 so lets test turning on some lights in 32-63 range
+  //if they stick we probably have a ht16k33 chip there and with that the rest of the enigma
+  //if not it is probably standalone and we need to "disable" the switch
+  //or it will fill the serial port with switch changes
+  for (i=34;i<63;i++){
+    if ((i%2)==0)
+      HT.setLed(i);
+    else
+      HT.clearLed(i);
+  }
+  HT.sendLed();
+
+  standalone=false;
+  for (i=0;i<sizeof(HT.displayRam);i++)
+    HT.displayRam[i]=0;
+
+  for (i = 0; i < 128; i++) { // clear the array
+    HT.clearLed(i);
+  }
+
+  for (i=34;i<63;i++){//Verify that they are set correctly, if not assume standalone
+    if ((i%2)==0){
+      if (!HT.getLed(i,true)){
+	standalone=true;
+      }
+    } else {
+      if (HT.getLed(i,true)){
+	standalone=true;
+      }
+    }
+  }
+
+  if (standalone)
+    Serial.println(F("No IC detected,assuming standalone"));
+  //  else
+  //    Serial.println(F("IC detected assuming not standalone"));
+  Serial.println();
+
   delay(500);
 
 #ifdef ESP8266
@@ -1617,10 +1662,10 @@ void setup() {
     } // if 0-3
   } // if key>0
 
+  operationMode=none;//by setting it to none it triggers a call to printSettings();
   checkSwitchPos();
   displayWalzes();
   logLevel=0;
-  printSettings();
 
   //for morsecode
   pinMode(spkPin,OUTPUT);
@@ -1845,6 +1890,7 @@ uint8_t getValidRotors(uint8_t walzeNo, uint8_t *valid,uint8_t *vcnt){
 //
 
 
+//#define DEBUGDUP
 //Local helper function
 //Return true if any dup is found
 boolean p_checkDups(uint8_t pairs[13][2]){
@@ -1852,17 +1898,39 @@ boolean p_checkDups(uint8_t pairs[13][2]){
   char used[27];//letters used
   
   used[0]='\0'; // Zero the string
+#ifdef DEBUGDUP
+  Serial.println();//PSDEBUG
+  for (i=0;i<13;i++){Serial.print((char)pairs[i][0]);Serial.print((char)pairs[i][1]);Serial.print(F(" "));}//PSDEBUG
+  Serial.println();//PSDEBUG
+#endif
   for (i=0;i<13;i++){
     if (pairs[i][0]==' ' && pairs[i][1]==' ')
       continue;
     if (strlen(used)>0){
+#ifdef DEBUGDUP
+      if (strchr(used,pairs[i][0]) != NULL){
+	Serial.print(F("Found 0 "));Serial.print((char)pairs[i][0]);Serial.print(F(" in "));Serial.println(used);
+	return true;
+      }
+      if (strchr(used,pairs[i][1]) != NULL){
+	Serial.print(F("Found 1 "));Serial.print((char)pairs[i][1]);Serial.print(F(" in "));Serial.println(used);
+	return true;
+      }
+#else
       if (strchr(used,pairs[i][0]) != NULL || strchr(used,pairs[i][1]) != NULL)
 	return true;
+#endif
+
     }
+    if (pairs[i][0]==pairs[i][1])
+      return true;
     len=strlen(used);
     used[len+2] = '\0';
     used[len+1] = pairs[i][1];
     used[len]   = pairs[i][0];
+#ifdef DEBUGDUP
+    Serial.println(used);//PSDEBUG
+#endif
   }
   return false;
 }// p_checkDups
@@ -1948,11 +2016,34 @@ boolean checkWalzes() {
 	      //Clearing of the plugboard values will be done next time it's checked
 	    }else{
 	      settings.plugboardMode=virtualpb;
-	      pbpos=0;
-	    }
-	  }
+	    }// if virtualpb;else
+	  }// if walzeNo==0
 	  if (settings.plugboardMode!=physicalpb ){
 	    if (walzeNo==1){
+	      if (settings.plugboardMode==virtualpb){
+		//first round, lets transfer current setting to the pairs
+		x=0;
+		for (i = 0; i < sizeof(settings.plugboard); i++) {
+		  if (settings.plugboard.letter[i] > i) {
+		    pbpairs[x][0]=i+'A';
+		    pbpairs[x][1]=settings.plugboard.letter[i]+'A';
+		    x++;
+#ifdef DEBUGDUP
+		    Serial.print(x-1);Serial.print(F(" "));Serial.print(pbpairs[x-1][0],DEC);Serial.print(F(" "));Serial.println(pbpairs[x-1][1],DEC);//PSDEBUG
+#endif
+		    if (x>12){
+		      //		      Serial.print(F("PSDEBUG: - error, to many pairs!!!"));
+		      break;
+		    }//PSDEBUG
+		  }//if larger
+		}//for pb
+		for (i=x;i<13;i++){ // clear the restr of the pairs
+		  pbpairs[i][0]=' ';
+		  pbpairs[i][1]=' ';
+		}
+		pbpos=12;//Start from the beginning
+	      } // if virtualpb
+
 	      settings.plugboardMode=config;
 	      if (pbpairs[pbpos][0]==' ' || pbpairs[pbpos][1]==' '){ // if you move on before connecting the other side it's removed.
 		pbpairs[pbpos][0]=' ';
@@ -1964,7 +2055,7 @@ boolean checkWalzes() {
 		}else{
 		  pbpos--;
 		}
-	      }else{ //if dir==up
+	      }else{ //if dir
 		if (pbpos==12){
 		  pbpos=0;
 		}else{
@@ -1972,10 +2063,10 @@ boolean checkWalzes() {
 		}
 	      } // if direction
 	    } else if (walzeNo==2 || walzeNo==3){
-	      //BUG: - should read current config from settings.plugboard.letter to pbpairs
 	      //BUG: - should accept keys also
 	      //BUG:? - should flash the letters on the lampboard as they are active
 
+	      x=0; //charge the emergency break
 	      if (direction==up){
 		do {
 		  if ( pbpairs[pbpos][walzeNo-2]==' ' || pbpairs[pbpos][walzeNo-2] == 'A'){
@@ -1983,7 +2074,11 @@ boolean checkWalzes() {
 		  }else{
 		    pbpairs[pbpos][walzeNo-2]--;
 		  }
-	        } while (p_checkDups(pbpairs));		  
+#ifdef DEBUGDUP
+		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));//PSDEBUG
+#endif
+		  x++; //one more dup found
+	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
 	      }else{
 		do {
 		  if ( pbpairs[pbpos][walzeNo-2]==' ' || pbpairs[pbpos][walzeNo-2] == 'Z'){
@@ -1991,14 +2086,45 @@ boolean checkWalzes() {
 		  }else{
 		    pbpairs[pbpos][walzeNo-2]++;
 		  }
-	        } while (p_checkDups(pbpairs));
+#ifdef DEBUGDUP
+		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));//PSDEBUG
+#endif
+		  x++; //one more dup found
+	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
 	      }
+	      if (x==26){
+		Serial.println(F("To many DUPs found - abort "));
+		for (i = 0; i < 13; i++) {
+		  Serial.print(i);Serial.print(F(" "));Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);
+		}
+	      }
+#ifdef DEBUGDUP
+	      for (i = 0; i < 13; i++) {//PSDEBUG
+		Serial.print(i);Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);//PSDEBUG
+	      }//PSDEBUG
+	      Serial.println();
+	      Serial.println();Serial.print(F("PSDEBUG2"));Serial.println();//PSDEBUG
+#endif
+	      //transform the pbpairs to settings
+	      //First clear the board
+	      for (i = 0; i < sizeof(settings.plugboard.letter); i++) {
+		settings.plugboard.letter[i]=i;
+	      }
+	      //Now populate it with the new setting
 	      for (i = 0; i < 13; i++) {
-		if ( pbpairs[pbpos][0]==' ')
+		if ( pbpairs[i][0]==' ' || pbpairs[i][1]==' ')
 		  continue;
-		settings.plugboard.letter[pbpairs[i][0]]=pbpairs[i][1];
-		settings.plugboard.letter[pbpairs[i][1]]=pbpairs[i][0];
+		settings.plugboard.letter[pbpairs[i][0]-'A']=pbpairs[i][1]-'A';
+		settings.plugboard.letter[pbpairs[i][1]-'A']=pbpairs[i][0]-'A';
+#ifdef DEBUGDUP
+		Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);//PSDEBUG
+		//Serial.print(i);Serial.print(F(" "));Serial.print(pbpairs[i][0]-'A');Serial.print(F(" "));Serial.println(pbpairs[i][1]-'A');//PSDEBUG
+#endif
 	      }
+#ifdef DEBUGDUP
+	      printPlugboard();//PSDEBUG
+	      Serial.println();//PSDEBUG
+#endif
 	    } // if walze==2 or 3
 
 	    if (walzeNo!=0){
@@ -2211,8 +2337,7 @@ void checkPlugboard() {
     if (settings.plugboardMode==config) // if we where in config mode, move on to virtual plugboard before saving it
       settings.plugboardMode=virtualpb;
     saveSettings(0);
-    //PSDEBUG
-    if (bitRead(debugMask,1)==1 || logLevel>1){
+    if (logLevel>1){
       Serial.print(F("New Plugboard (Steckerbrett) setting: "));
       printPlugboard();
       Serial.println();

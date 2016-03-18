@@ -21,7 +21,7 @@
  *    You should have received a copy of the GNU General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  Status: way pre Alpha, still adding functions to the code.
+ *  Status: pre Alpha, still adding functions to the code.
  *
  *  History:
  *  v0.00 - test of library, keyboard and LEDs
@@ -34,6 +34,18 @@
  *
  * TODO: a lot but some "highlights"...
  *   tigh everything together in a user usable interface
+ *   add sound
+ *
+ * Shortcomings (all due to lack of program space):
+ *   No UKWD
+ *   No UHR
+ *   limited number of enigmas partly because
+ *     always doublestep
+ *     UKW always fixed
+ *   Limited functions on serial API
+ *     picky about format entered
+ *     ringstellung always letters
+ *     walze is numeric
  *
  * Decisions:
  *   The wheels are numbered left to right since that's the order they are
@@ -50,9 +62,13 @@
  *    the space of preset F is used for odometer and serial number
  *   factory reset will not clear the odometer, wouldn't do that on the real enigma (one with counter).
  *
- * To consider: Maybe change the code for UKW so when a UKW is selected the ukwD array is loaded with the config
+ * To consider:
+ *   Maybe change the code for UKW so when a UKW is selected the ukwD array is loaded with the config
  *	that way it's always same code no matter what UKW you have, fixed or dynamic (UKW-D)
  *	on the other hand, low on progmem so UKW-D does not fit.
+ *   UHR doesn't fit in this version but if it did, maybe process it in encrypt() instead
+ *	of remapping the plugboard - so it can be visualized in loglevel 2
+ *
  *
  * BUGS:
  *      no code to handle presets except from serial
@@ -68,9 +84,9 @@
  *		check if standalone, turn on a few leds and see if they are on with getLed
  *	<s>Running without plugboard doesn't show virtual plugboard in printSetting
  *	<s>when setting virtual plugboard on physical config AA is possible
+ *	showing of gamma/beta when pressing button is broken
  *
  *Milestone:
- *	Need to check direction of all parts in checkWalze
  *
 */
 
@@ -181,6 +197,14 @@ typedef struct {
   char letter[26];         // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
 } letters_t;
 
+
+#ifdef NOMEMLIMIT
+//Prep for software version of UHR
+const uint8_t UHR[] PROGMEM = {6,31,4,29,18,39,16,25,30,23,28,1,38,11,36,37,26,27,24,21,14,3,12,17,2,7,0,33,10,35,8,5,22,19,20,13,34,15,32,9};
+const uint8_t UHROUT[] PROGMEM={6,0,7,5,1,8,4,2,9,3};
+static uint8_t uhrpos=0;
+#endif
+
 // wiring info comes from http://www.cryptomuseum.com/crypto/enigma/wiring.htm
 
 //26 letters and and a 6char name
@@ -256,7 +280,7 @@ const char walzeVIII[]  PROGMEM = "FKQHTLXOCBJSPDZRAMEWNIUYGVVIII8ZM";  // 8= mi
 const char walzeBeta[]  PROGMEM = "LEYJVCNIXWPBQMDRTAKZGFUHOSBETAB";    // 9= Beta
 const char walzeGamma[] PROGMEM = "FSOKANUERHMBTIYCWLQPZXVGJDGAMMG";    // 10= Gamma
 
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 //
 const char walzeNI[]    PROGMEM = "WTOKASUYVRBXJHQCPZEFMDINLGN  I1Q";    // 11= Norway Walze I
 const char walzeNII[]   PROGMEM = "GJLPUBSWEMCTQVHXAOFZDRKYNIN II2E";    // 12= Norway Walze II
@@ -282,7 +306,7 @@ const uint8_t WALZE_VII=7;
 const uint8_t WALZE_VIII=8;
 const uint8_t WALZE_Beta=9;
 const uint8_t WALZE_Gamma=10;
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 const uint8_t WALZE_NI=11;
 const uint8_t WALZE_NII=12;
 const uint8_t WALZE_NIII=13;
@@ -306,7 +330,7 @@ const char* const WALZE[] PROGMEM =
     walzeVIII,
     walzeBeta,
     walzeGamma,
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
     walzeNI,
     walzeNII,
     walzeNIII,
@@ -322,7 +346,7 @@ const char* const WALZE[] PROGMEM =
 #define letterCnt (int8_t)(strlen_P((char*)pgm_read_word(&WALZE[0]))) // the first is all letters and no notch
 
 //List of valid commands, must start with "!"
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!SAVE!LOAD!LOGLEVEL!DEBUG!VERBOSE!DUKW!";
 #else
 const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!SAVE!LOAD!LOGLEVEL!";
@@ -352,8 +376,9 @@ uint8_t logLevel=0;
 // 1=Plugboard
 static const uint8_t DEBUGKBD=0;
 static const uint8_t DEBUGPLUG=1;
+#ifdef NOMEMLIMIT
 uint8_t debugMask=0;
-
+#endif
 //enigma models
 // http://www.cryptomuseum.com/crypto/enigma/timeline.htm
 // Year  Army/Air   Navy UKW    Wheels
@@ -471,7 +496,7 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
     {UKWBT,UKWCT,NA,NA},
     true,
     true
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
   },
   {
     NorwayEnigma,
@@ -815,7 +840,7 @@ void printSettings(){
   Serial.print(F("ringstellung: "));
   printWheel(&settings.ringstellung[0]);
   Serial.println();
-  Serial.print(F("Plugboard (Steckerbrett): "));
+  Serial.print(F("Plugboard: "));
   if (settings.plugboardMode==virtualpb){
     Serial.print(F("virtual"));
   }else if (settings.plugboardMode==physicalpb){
@@ -863,14 +888,14 @@ unsigned int getCsum(void *block, uint8_t size) {
     crc = ~crc;
   }
   
-#ifdef DEBUG
+#ifdef DEBUGCSUM
   Serial.print(F(" getCsum: "));
   Serial.print(crc,HEX);
   Serial.print(F(" "));
   Serial.print(size,DEC);
   Serial.println();
-#endif  
-  
+#endif
+
   return (int) crc;
 } // getCsum
 
@@ -1123,9 +1148,9 @@ void displayLetter(char letter, uint8_t walzeno) {
 #ifdef DEBUGWL
   if (letter >= 0 ){ // = always
     //  if (letter < ' ' || letter > 'Z' ){
-  //  if (letter < 'A' || letter > 'Z' ){
-  //    if (letter == 'N' && val != 0x3324 ){
-  //  if (letter == 'A' && val != 0xF3C0 ){
+    //  if (letter < 'A' || letter > 'Z' ){
+    //    if (letter == 'N' && val != 0x3324 ){
+    //  if (letter == 'A' && val != 0xF3C0 ){
     Serial.print(F(" Write wheel "));
     Serial.print(walzeno,DEC);
     Serial.print(F(" val "));
@@ -1153,7 +1178,7 @@ void displayString(char msg[], uint16_t sleep) {
     if (msg[i]>='A' && msg[i]<='Z') HT.setLedNow(pgm_read_byte(led+msg[i]-65));
     displayLetter(msg[i], WALZECNT-1);
     //BUG: - should dynamically adjust to WALZECNT
-    
+
     if (i > 0) {
       displayLetter(msg[i - 1], WALZECNT-2);
     }
@@ -1219,12 +1244,6 @@ void displayWalzes(){
 	  displayLetter(' ',i);
 	}else{
 	  displayLetter(getWalzeChar(&WALZE[settings.walze[i]],letterCnt+WALZEDISP-1),i); // show "real" number based on current model
-	  /*
-	} else if (settings.walze[i]<10){
-	  displayLetter(settings.walze[i]+'0',i); // the first 9 are numeric
-	}else{
-	  displayLetter(settings.walze[i]+'A'-10,i); // next we go into alphabet
-	  */
 	}
       }
 
@@ -1235,7 +1254,7 @@ void displayWalzes(){
       // **************** MODEL ****************
     } else if (operationMode==model) {
       displayLetter(EnigmaModel.display[i],i);
-#ifdef FAILSAFE
+#ifdef NOMEMLIMIT
     } else {
       if (i==0){
 	Serial.println();
@@ -1249,6 +1268,7 @@ void displayWalzes(){
 
 /****************************************************************/
 uint8_t checkKB() {
+#ifdef NOMEMLIMIT
   boolean ready;
   uint8_t i,keyflag;
   int8_t key;
@@ -1303,6 +1323,9 @@ uint8_t checkKB() {
   } else {
     return HT.readKey();
   }
+#else
+    return HT.readKey();
+#endif
 } // checkKB
 
 /****************************************************************/
@@ -1613,7 +1636,7 @@ void setup() {
       switch (i) {
       case '0': // leftmost button UNDER WALZE 0
 	if (!readSettings(1)){
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 	  Serial.println();
 	  Serial.println();
 	  Serial.println(F("Preset 1 - M3,UKWB, wheel III,II,I, ringstell AAA:"));
@@ -1623,7 +1646,7 @@ void setup() {
 	break;
       case '1':
 	if (!readSettings(2)){
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 	  Serial.println();
 	  Serial.println();
 	  Serial.println(F("Preset 2 - M4,UKWBt, wheel beta,III,II,I, ringstell AAAA:"));
@@ -1633,7 +1656,7 @@ void setup() {
 	break;
       case '2':
 	if (!readSettings(3)){
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 	  Serial.println();
 	  Serial.println();
 	  Serial.println(F("Preset 3 - M3, wheel I,II,III, ringstell AAA"));
@@ -1643,7 +1666,7 @@ void setup() {
 	break;
       case '3':
 	if (!readSettings(4)){
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
 	  Serial.println();
 	  Serial.println();
 	  Serial.println(F("Preset 4 - NORW,UKWN, wheel NIII,NII,NI, ringstell AAA:"));
@@ -2335,11 +2358,44 @@ void checkPlugboard() {
   //If something changed, copy it over and save the new setting
   if (memcmp(settings.plugboard.letter, newplugboard.letter, sizeof(settings.plugboard)) != 0){
     memcpy(settings.plugboard.letter, newplugboard.letter,sizeof(settings.plugboard));
+#ifdef NOMEMLIMIT
+    // here is some psuedocode to update settings.plugboard.letter[] according to current uhr setting
+    // this code need to be made for progmem and tested
+    // it is more like notes for how to do it
+    // 1 extract the plug pairs from settings.plugboard.letter
+    // 2 figure out where the first letter goes in (red side, thin = pos+3)
+    // 3 figure out where that uhr connection goes to
+    // 4 figure out what plug that is coming out on
+    // 5 figure out what the second letter of that plug is
+
+    //Figure out the pairs
+    uint8_t pb[13][2];
+    uint8_t pbpos=0;
+    for (i = 0; i < sizeof(settings.plugboard); i++) {
+      if (settings.plugboard.letter[i] > i) {
+	pb[pbpos][0]=i+'A';
+	pb[pbpos][1]=settings.plugboard.letter[i]+'A';
+	pbpos++;
+      }
+    }
+    if (pbpos==10){ // if we have 10 plugs "inserted"
+      for (i = 0; i<10;i++){
+	//PSDEBUG working here, this logic is not at all complete and is broken
+	ch_in=pb[i][0];
+	whitside=uhr[normalized(i*4+3,40)];//what level it comes out at
+	ch=keyof(whiteside/4,UHROUT[]);//to be reversed, at what position is ch/4
+	ch_out=pb[ch][1];
+	//save ch_in and ch_out
+      }
+    }
+  }
+#endif
+
     if (settings.plugboardMode==config) // if we where in config mode, move on to virtual plugboard before saving it
       settings.plugboardMode=virtualpb;
     saveSettings(0);
     if (logLevel>1){
-      Serial.print(F("New Plugboard (Steckerbrett) setting: "));
+      Serial.print(F("New Plugboard setting: "));
       printPlugboard();
       Serial.println();
       delay(200); // mostly to debounce the plug connection
@@ -2528,7 +2584,7 @@ char encrypt(char ch){
     minWalze=0;
   }
 
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
   if (logLevel > 1 ){
     Serial.print(F("sb:  "));for (i=0;i<letterCnt;i++){Serial.print((char)(settings.plugboard.letter[i]+'A'));};Serial.println();
     Serial.print(F("ETW: "));for (i=0;i<letterCnt;i++){Serial.print(getWalzeChar(&ETW[settings.etw],i));};Serial.println();
@@ -2886,7 +2942,7 @@ void parseCommand() {
 
     } else if (cmd==CMD_SETTINGS){
       // SETTINGS
-#ifdef NOLIMITS
+#ifdef NOMEMLIMIT
       //TODO/BUG: Suppose to be able to set it all here also but no program space for that code
       Serial.print(F("%SETTINGS: "));
       printModel();
@@ -2972,6 +3028,10 @@ void parseCommand() {
 
     } else if (cmd==CMD_WALZE){
       // WALZE
+      // should accept roman also
+      // should accept space separated
+      // should accept "G" or "Gamma" and "B" or "Beta"
+      // should make an entry of "3" or "III" for any enigma=> rotor III for that model
       if (val.length()!=0){
 	val+=",";
 	i=0;
@@ -3003,6 +3063,7 @@ void parseCommand() {
 
     } else if (cmd==CMD_RING){
       // RING
+      // should accept space separted numeric
       if (val.length()!=0){
 	parseWheels(val,&settings.ringstellung[0]);
       }
@@ -3012,7 +3073,6 @@ void parseCommand() {
 
     } else if (cmd==CMD_PLUGBOARD){
       // PLUGBOARD
-      
       if (val.length()!=0){
 	parsePlugboard((char*)val.c_str());
       }
@@ -3027,6 +3087,7 @@ void parseCommand() {
       Serial.print(F("%START: "));
       printWheel(&settings.currentWalze[0]);
       displayWalzes();
+
     } else if (cmd==CMD_SAVE){
       //SAVE
       Serial.print(F("%SAVE"));
@@ -3041,6 +3102,7 @@ void parseCommand() {
 	  printValError(val);
 	}
       }
+
     } else if (cmd==CMD_LOAD){
       //LOAD
       Serial.print(F("%LOAD"));
@@ -3071,8 +3133,8 @@ void parseCommand() {
       }	
       Serial.print(F("%LOGLEVEL:"));
       Serial.println(logLevel);
-  
-      /*    
+
+#ifdef NOMEMLIMIT
     } else if (cmd==CMD_DEBUG){
       //DEBUG
       if (val.length()!=0){
@@ -3083,7 +3145,7 @@ void parseCommand() {
     } else if (cmd==CMD_VERBOSE){
       //VERBOSE
       Serial.print(F("%VERBOSE - not implemented"));
-      */
+#endif
     }
   }
   Serial.println();

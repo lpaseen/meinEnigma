@@ -64,10 +64,10 @@
  *	<s>Shorten the startup, changes so when in "model" mode pressing keys shows info
  *	<s>  like "v" for version, "o" for odometer and so on.
  *	<s?>when pressing multiple keys fast it sometimes doesn't clear all LEDs properly
- *	Running standalone is a problem with the switch on A6 changing all the time
+ *	<s>Running standalone is a problem with the switch on A6 changing all the time
  *		check if standalone, turn on a few leds and see if they are on with getLed
- *	Running without plugboard doesn't show virtual plugboard in printSetting
- *	when setting virtual plugboard on physical config AA is possible
+ *	<s>Running without plugboard doesn't show virtual plugboard in printSetting
+ *	<s>when setting virtual plugboard on physical config AA is possible
  *
  *Milestone:
  *	Need to check direction of all parts in checkWalze
@@ -816,23 +816,19 @@ void printSettings(){
   printWheel(&settings.ringstellung[0]);
   Serial.println();
   Serial.print(F("Plugboard (Steckerbrett): "));
-  if (plugboardPresent){
-    if (settings.plugboardMode==virtualpb){
-      Serial.print(F("virtual"));
-    }else if (settings.plugboardMode==physicalpb){
-      Serial.print(F("physical"));
-      checkPlugboard();
-    } else {
-      Serial.print(F("config"));
-    }
-    Serial.print(F(" - "));
-    if (settings.plugboardMode==physicalpb && plugboardEmpty){
-      Serial.print(F("empty"));
-    }else{
-      printPlugboard();
-    }
+  if (settings.plugboardMode==virtualpb){
+    Serial.print(F("virtual"));
+  }else if (settings.plugboardMode==physicalpb){
+    Serial.print(F("physical"));
+    checkPlugboard();
   } else {
-    Serial.print(F("not present "));
+    Serial.print(F("config"));
+  }
+  Serial.print(F(" - "));
+  if (settings.plugboardMode==physicalpb && plugboardEmpty){
+    Serial.print(F("empty"));
+  }else{
+    printPlugboard();
   }
   Serial.println();
 
@@ -1149,6 +1145,9 @@ void displayLetter(char letter, uint8_t walzeno) {
 // 
 void displayString(char msg[], uint16_t sleep) {
   uint8_t i;
+
+  if (standalone)
+    return; // no chip was found earlier, no point waisting time here
 
   for (i = 0; i < strlen(msg); i++) {
     if (msg[i]>='A' && msg[i]<='Z') HT.setLedNow(pgm_read_byte(led+msg[i]-65));
@@ -1584,7 +1583,7 @@ void setup() {
   //    Serial.println(F("IC detected assuming not standalone"));
   Serial.println();
 
-  delay(500);
+  if (!standalone){delay(500);}
 
 #ifdef ESP8266
   EEPROM.begin(1024);
@@ -1601,8 +1600,10 @@ void setup() {
   }
 
 #ifndef TESTCRYPTO
-  displayString("ENIGMA", 200);
-  delay(500);
+  if (!standalone){
+    displayString("ENIGMA", 200);
+    delay(500);
+  }
 #endif
   
   key=checkKB();
@@ -3271,6 +3272,7 @@ void loop() {
 	  }// if loglevel
 	} // if a-z
       } // for msg[]
+      saveSettings(0);
       Serial.println();
     } else {
       Serial.print(F("Unknown input: "));

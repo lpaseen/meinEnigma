@@ -84,7 +84,9 @@
  *		check if standalone, turn on a few leds and see if they are on with getLed
  *	<s>Running without plugboard doesn't show virtual plugboard in printSetting
  *	<s>when setting virtual plugboard on physical config AA is possible
- *	showing of gamma/beta when pressing button is broken
+ *	<s>showing of gamma/beta when pressing button is broken
+ *	<s>It doesn't clear plugboard when setConfig gets an empty one
+ *	<s>no way to change the group size in the output
  *
  *Milestone:
  *
@@ -96,8 +98,28 @@
 #include <Wire.h>
 #ifdef ESP8266
 #include <pgmspace.h>
+static const uint16_t EEPROMSIZE=1024;
 #else
 #include <avr/pgmspace.h>
+#endif
+
+#define SoundBoard
+#ifdef SoundBoard
+#include <AltSoftSerial.h>
+AltSoftSerial altSerial;
+// AltSoftSerial always uses these pins:
+//
+// Board          Transmit  Receive   PWM Unusable
+// -----          --------  -------   ------------
+// Arduino Uno        9         8         10
+
+static const uint8_t vol30[10]        = {0x7E, 0xFF, 0x06, 0x06, 0x00, 0x00, 0x1E, 0xFE, 0xD7, 0xEF};
+
+static const uint8_t getState[10]     = {0x7E, 0xFF, 0x06, 0x42, 0x00, 0x00, 0x00, 0xFE, 0xB9, 0xEF};
+static const uint8_t getSDFileCnt[10] = {0x7E, 0xFF, 0x06, 0x48, 0x00, 0x00, 0x00, 0xFE, 0xB3, 0xEF};
+
+uint8_t play1[10]        = { 0X7E, 0xFF, 0x06, 0X03, 00, 00, 0x01, 0xFE, 0xF7, 0XEF};
+
 #endif
 
 
@@ -218,8 +240,10 @@ const uint8_t ETWJAP=2;
 const char* const ETW[] PROGMEM =
   {
     etw0,
+#ifdef NOMEMLIMIT
     etwKBD,
     etwJAP
+#endif
   };
 
 // 26 letters + 4 wheel + 5 display
@@ -229,8 +253,10 @@ const char ukwB[]  PROGMEM = "YRUHQSLDPXNGOKMIEBFZCWVJATUKWBUKWB "; // 1= B
 const char ukwC[]  PROGMEM = "FVPJIAOYEDRZXWGCTKUQSBNMHLUKWCUKWC "; // 2= C
 const char ukwBt[] PROGMEM = "ENKQAUYWJICOPBLMDXZVFTHRGSUKBTUKWBT"; // 3= Bthin
 const char ukwCt[] PROGMEM = "RDOBJNTKVEHMLFCWZAXGYIPSUQUKCTUKWCT"; // 4= Cthin
+#ifdef NOMEMLIMIT
 const char ukwN[]  PROGMEM = "MOWJYPUXNDSRAIBFVLKZGQCHETUKWNUKWN "; // 5= Norway
 const char ukwK[]  PROGMEM = "IMETCGFRAYSQBZXWLHKDVUPOJNUKWKUKWK "; // 6= EnigmaK or Swiss
+#endif
 //const char ukwD[]  PROGMEM = "AOCDEFGHIJKLMNBPQRSTUVWXYZUKWDUKWD "; // B-O is fixed, rest may vary
 //TODO : Add ukw-D as described at http://www.cryptomuseum.com/crypto/enigma/ukwd/index.htm
 
@@ -258,8 +284,10 @@ const char* const UKW[] PROGMEM =
     ukwC,
     ukwBt,
     ukwCt,
+#ifdef NOMEMLIMIT
     ukwN,
     ukwK,
+#endif
   };
 
 //Wiring followed by rollover notch(es)
@@ -347,9 +375,17 @@ const char* const WALZE[] PROGMEM =
 
 //List of valid commands, must start with "!"
 #ifdef NOMEMLIMIT
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!SAVE!LOAD!LOGLEVEL!DEBUG!VERBOSE!DUKW!";
+#ifdef GERMAN
+const char APICMDLIST[] PROGMEM = "!EINSTELLUNGEN!MODELL!UKW!WALZE!RINGSTELLUNG!STECKERBRETT!ANZFANG!TEILNEHMER!SPAREN!LADEN!LOGDATEI!DEBUG!AUSFÜHRLICHE!DUKW!";
 #else
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!SAVE!LOAD!LOGLEVEL!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZESAVE!LOAD!LOGLEVEL!DEBUG!VERBOSE!DUKW!";
+#endif
+#else
+#ifdef GERMAN
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!";
+#else
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!";
+#endif
 #endif
 static const uint8_t CMD_SETTINGS=0;
 static const uint8_t CMD_MODEL=1;
@@ -358,12 +394,13 @@ static const uint8_t CMD_WALZE=3;
 static const uint8_t CMD_RING=4;
 static const uint8_t CMD_PLUGBOARD=5;
 static const uint8_t CMD_START=6;
-static const uint8_t CMD_SAVE=7;
-static const uint8_t CMD_LOAD=8;
-static const uint8_t CMD_LOGLEVEL=9;
-static const uint8_t CMD_DEBUG=10;
-static const uint8_t CMD_VERBOSE=11;
-static const uint8_t CMD_DUKW=12; // config UKW-D, similar to plugboard
+static const uint8_t CMD_GROUPSIZE=7;
+static const uint8_t CMD_SAVE=8;
+static const uint8_t CMD_LOAD=9;
+static const uint8_t CMD_LOGLEVEL=10;
+static const uint8_t CMD_DEBUG=11;
+static const uint8_t CMD_VERBOSE=12;
+static const uint8_t CMD_DUKW=13; // config UKW-D, similar to plugboard
 
 //Log level on serial port
 //0 = all off, only message
@@ -578,8 +615,8 @@ boolean plugboardEmpty=false;
 boolean standalone=false;	// If standalone (no hardware, just serialAPI)
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
-uint8_t lastKey; // last key pressed, needed to pass the info between subroutines
-char lastKeyCode; // after parsed trough scancode
+int8_t lastKey; // last key pressed, needed to pass the info between subroutines
+char   lastKeyCode; // after parsed trough scancode
 uint8_t lastPreset; // last loaded preset
 
 HT16K33 HT;
@@ -707,6 +744,77 @@ uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
   return Wire.read()<<8|val;
 }
 
+
+#ifdef SoundBoard
+/****************************************************************/
+//Read data from soundboard
+//
+void readData() {
+  uint8_t i;
+  int j;
+  char ch;
+
+  j = 0;
+  do {
+    ch = altSerial.read();
+    j++;
+    delay(100);
+  } while (ch == -1 && j < 100); // about 10 seconds timeout
+  //PSDEBUG
+  for (i = 0; i < 6; i++) {
+    ch = altSerial.read();
+    if (ch >= 0 && ch < 10) {
+      Serial.print(F("0"));
+    }
+    Serial.print(ch, HEX);
+    Serial.print(F(" "));
+  }
+  Serial.println();
+} // readData
+
+/****************************************************************/
+//write data to soundboard
+//
+void writeData(uint8_t fileno, uint8_t size) {
+  uint8_t i;
+  uint16_t csum;
+
+  csum=0;
+  for (i = 0; i < size-3; i++) {
+    altSerial.write( play1[i] );
+    csum+=play1[i];
+  }
+  csum=(0-csum) & 0xffff;
+  altSerial.write(csum >>8);
+  altSerial.write(csum & 0xFF);
+  altSerial.write(0xEF);
+} // writeData
+
+
+/****************************************************************/
+//write data to soundboard
+//
+void playSong(uint8_t fileno) {
+  uint8_t i;
+  uint16_t csum;
+
+
+  //Page 6 of http://www.trainelectronics.com/Arduino/MP3Sound/TalkingTemperature/FN-M16P%20Embedded%20MP3%20Audio%20Module%20Datasheet.pdf
+  csum=0;
+  play1[5]=fileno>>8;
+  play1[6]=fileno & 0xFF;
+  for (i = 0; i < 10-3; i++) {
+    altSerial.write( play1[i] );
+    csum+=play1[i];
+  }
+  csum=(0-csum) & 0xffff;
+  altSerial.write(csum >>8);
+  altSerial.write(csum & 0xFF);
+  altSerial.write(0xEF);
+} // writeData
+#endif
+
+
 /****************************************************************/
 //Get a single character from a specific wheel and wheel position
 //To be called like
@@ -753,11 +861,17 @@ void printUKW(uint8_t ukw){ // one of 8 rotors
 } // printRotor
 
 /****************************************************************/
+//BUG: - should print out name, possible use printUKW
 void printRotor(uint8_t rotor[4]){ // one of 8 rotors
-  uint8_t i;
+  uint8_t i,j;
   for (i=0;i<WALZECNT;i++){
-    Serial.print(rotor[i]);
-    if (i<WALZECNT-1) Serial.print(F("-"));
+    //    Serial.print(rotor[i]);
+    if (rotor[i]!=0){
+      for (j=0;j<4;j++){
+	Serial.print((char)getWalzeChar(&WALZE[rotor[i]],26+j));
+      }
+    }
+    if (i<WALZECNT-1 && rotor[i]!=0) Serial.print(F(" -"));
   }
 } // printRotor
 
@@ -812,11 +926,13 @@ void printSettings(){
   Serial.println();
   Serial.print(F("Odo meter: "));
   Serial.println(odometer, DEC);
-  Serial.print(F("morsecode: "));
-  if (settings.morseCode){
-    Serial.println(F("ON"));
-  }else{
-    Serial.println(F("OFF"));
+  if (!standalone){
+    Serial.print(F("morsecode: "));
+    if (settings.morseCode){
+      Serial.println(F("ON"));
+    }else{
+      Serial.println(F("OFF"));
+    }
   }
   Serial.print(F("Serial number: "));
   Serial.println(serialNumber, DEC);
@@ -828,11 +944,15 @@ void printSettings(){
   printModelDescription();
   Serial.println(F(")"));
 
+#ifdef NOMEMLIMIT
   Serial.print(F("entry wheel: "));
-  Serial.println(settings.etw, DEC);
+  Serial.println(settings.etw, DEC);//Should be dynamic but we only support one version so no point in writing it out
+  printUKW(settings.etw);
+  Serial.println();
+#endif  
   Serial.print(F("reflector: "));
   printUKW(settings.ukw);
-  Serial.println(settings.ukw, DEC);
+  Serial.println();
   Serial.print(F("Rotors: "));
   printRotor(&settings.walze[0]);
 
@@ -899,6 +1019,27 @@ unsigned int getCsum(void *block, uint8_t size) {
   return (int) crc;
 } // getCsum
 
+#ifdef ESP8266
+void eeprom_read_block(void * datao, uint32_t address, size_t len){
+  int i;
+  int data=&datao;
+  for(i=0; i<len; i++){
+    data[i] = EEPROM.read(address+i);
+  }
+}
+
+void eeprom_write_block(void * datai, uint32_t address, size_t len){
+  int i;
+  int data=&datai;
+  
+  for(i=0; i<len; i++){
+    EEPROM.write((&address)+i, data[i]);
+  }
+  EEPROM.commit();
+}
+#endif
+
+
 /****************************************************************/
 // save the settings to eeprom
 void saveSettings(uint8_t preset) {
@@ -914,18 +1055,21 @@ void saveSettings(uint8_t preset) {
   }
 #ifdef ESP8266
   for (i=0;i<sizeof(settings);i++){
-    EEPROM.write((void*)(preset*SETTINGSIZE)+1,(const void*)&settings+1);//BUG:FIX THIS
+    //    EEPROM.write((preset*SETTINGSIZE)+1,(uint8_t)&(settings+1));//BUG:FIX THIS
+    //*((char *) &struct_data + i)
+    EEPROM.write((preset*SETTINGSIZE)+1,*((char *)&settings+1));//BUG:FIX THIS
   }
+//  eeprom_write_block((const void*)&settings, (void*)(preset*SETTINGSIZE), sizeof(settings));
 #else
   eeprom_update_block((const void*)&settings, (void*)(preset*SETTINGSIZE), sizeof(settings));
 #endif
 
   // odometer is saved separately
 #ifdef ESP8266
-  EEPROM.write((uint8_t*)(EEPROM.length()-8),(uint8_t)(odometer>>24 & 0xFF));
-  EEPROM.write((uint8_t*)(EEPROM.length()-7),(uint8_t)(odometer>>16 & 0xFF));
-  EEPROM.write((uint8_t*)(EEPROM.length()-6),(uint8_t)(odometer>>8  & 0xFF));
-  EEPROM.write((uint8_t*)(EEPROM.length()-5),(uint8_t)(odometer     & 0xFF));
+  EEPROM.write((int)(EEPROMSIZE-8),(uint8_t)(odometer>>24 & 0xFF));
+  EEPROM.write((int)(EEPROMSIZE-7),(uint8_t)(odometer>>16 & 0xFF));
+  EEPROM.write((int)(EEPROMSIZE-6),(uint8_t)(odometer>>8  & 0xFF));
+  EEPROM.write((int)(EEPROMSIZE-5),(uint8_t)(odometer     & 0xFF));
   EEPROM.commit();
 #else
   eeprom_write_byte((uint8_t*)(EEPROM.length()-8),(uint8_t)(odometer>>24 & 0xFF));
@@ -952,10 +1096,17 @@ uint8_t readSettings(uint8_t preset) {
   eeprom_read_block((void*)&eesettings, (void*)(preset*SETTINGSIZE), sizeof(eesettings));
 
   //serial number is set outside this program
+#ifdef ESP8266
+  serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-1));
+#else
   serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
-    
+#endif    
   //odometer is stored in the end of the eeprom instead of inside the structure.
+#ifdef ESP8266
+    odometer=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE)-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-5));
+#else
   odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
+#endif
   if (odometer==0xFFFFFFFF || odometer==0xFF3FFFFF){ // default eeprom value = never set/wiped
     odometer=0;
   }
@@ -1006,6 +1157,7 @@ void updateEncoderState() {
   } // for each rotor
 } //updateEncoderState
 
+#ifndef ESP8266
 ISR (PCINT2_vect) { // handle pin change interrupt for D0 to D7 here
   updateEncoderState();
 } // ISR D0-D7
@@ -1013,6 +1165,7 @@ ISR (PCINT2_vect) { // handle pin change interrupt for D0 to D7 here
 ISR (PCINT0_vect) { // handle pin change interrupt for D8 to D13 here
   updateEncoderState();
 } // ISR D8-D13
+#endif
 
 /****************************************************************/
 // Turn on/off decimal point
@@ -1125,8 +1278,7 @@ void setConfig(enigmaModel_t model,
   }
   settings.etw = etw; // Entry walze
 
-  if (strlen(plugboard)>0)
-    parsePlugboard(plugboard);
+  parsePlugboard(plugboard);
 } // setConfig
 
 //#define DEBUGWL
@@ -1460,10 +1612,15 @@ void loadDefaults(){
 // practically speaking restore to factory defaults
 void eraseEEPROM(){
   uint16_t i;
+#ifdef ESP8266
+//PSDEBUG
 
+#else
   for (i=0;i<EEPROM.length()-SETTINGSIZE;i++){//Last setting (SETTINGSIZE bytes) are reserved, last 8 are 4 bytes odometer and 4 bytes serial
     EEPROM.update(i,0xff);
   }
+#endif
+
   loadDefaults();
 }// eraseEEPROM 
 
@@ -1479,6 +1636,19 @@ void setup() {
   Serial.begin(38400);
   Serial.println(F("My enigma v0.05"));
   Serial.println();
+
+#ifdef SoundBoard
+  altSerial.begin(9600);
+  delay(2000); // give the module time to initialize
+
+  readData(); // read status
+
+  //PSDEBUG
+  readData(); // read status
+  //PSDEBUG
+  Serial.println(F("Playing no 1"));
+  writeData(1);
+#endif
 
 #ifdef TESTCRYPTO
   Serial.print(F(" Test crypto no "));
@@ -1609,7 +1779,7 @@ void setup() {
   if (!standalone){delay(500);}
 
 #ifdef ESP8266
-  EEPROM.begin(1024);
+  EEPROM.begin(EEPROMSIZE);
 #endif
 
   //Setup encoder wheel interrupt
@@ -2758,7 +2928,7 @@ char encrypt(char ch){
   Serial.print(ch,DEC);
   Serial.print(F("} "));
 #endif
-  if (logLevel > 0 ){ // print letter used to go in to EKW
+  if (logLevel > 0 ){ // print letter used to go in to ETW
       Serial.print((char)(ch+'A'));
   }
 
@@ -2910,11 +3080,13 @@ void parseCommand() {
   if (pos <0){ // if not questionmark
     pos=serialInputBuffer.indexOf(':');
   }
+  
   if (pos==-1){
-    Serial.println(F("ERROR: No value found"));
-    serialInputBuffer = "";
-    stringComplete = false;
-  } else if (pos>=0){
+    // if no colon is given, behave as if it was one in the end
+    serialInputBuffer += ':';
+    pos=serialInputBuffer.indexOf(':');
+  }
+  if (pos>=0){
     command=serialInputBuffer.substring(0,pos);
     val=serialInputBuffer.substring(pos+1);	
     val.trim();
@@ -3036,9 +3208,13 @@ void parseCommand() {
 	val+=",";
 	i=0;
 	pos=0;
+	//	val.replace('B','9');
+	//	val.replace('G','A');
 	pos2=val.indexOf(',');
 	while (pos2>0 && i<6){
 	  val2=val.substring(pos,pos2);
+	  if (val2=="B") val2='9';
+	  if (val2=="G") val2="10";
 	  r[i++]=val2.toInt();
 	  pos=pos2+1;
 	  pos2=val.indexOf(',',pos2+1);
@@ -3057,7 +3233,11 @@ void parseCommand() {
 	  }
 	}
       }
+#ifdef GERMAN
       Serial.print(F("%WALZE: "));
+#else
+      Serial.print(F("%ROTOR: "));
+#endif
       printRotor(&settings.walze[0]);
       displayWalzes();
 
@@ -3087,6 +3267,16 @@ void parseCommand() {
       Serial.print(F("%START: "));
       printWheel(&settings.currentWalze[0]);
       displayWalzes();
+
+    } else if (cmd==CMD_GROUPSIZE){
+      //Group size
+      if (val.length()!=0){
+	if (val.toInt()>3 && val.toInt()<7){ 
+	  settings.grpsize=val.toInt();
+	}
+      }
+      Serial.print(F("%GROUP:"));
+      Serial.println(settings.grpsize);
 
     } else if (cmd==CMD_SAVE){
       //SAVE
@@ -3223,7 +3413,7 @@ void loop() {
   uint8_t i,pos;
   int8_t key;
   uint16_t val,cnt;
-  char j,ench;
+  char j,ench,ch;
   static int16_t prevFreeRam;
   int16_t freeNow;
   static unsigned long ms=0;
@@ -3355,7 +3545,7 @@ void loop() {
   while ((millis()-ms) <30){
     serialEvent();
     // and while we wait - check the rotors to have good response there
-    if (checkWalzes()){ // rotor(s) where changed
+    if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) where changed
       displayWalzes();
     }
     if (logLevel>1)
@@ -3375,7 +3565,7 @@ void loop() {
       lastKeyCode=pgm_read_byte(&scancodes[0]+key-1);
     }
     cnt=0;
-    if (logLevel>0){
+    if (logLevel>1){
       Serial.print(F(" Key pressed: "));
       Serial.print(key);
       Serial.print(F(" - "));
@@ -3492,6 +3682,7 @@ void loop() {
   if (HT.keysPressed()!=1){
     lastKey=0;//clear last key
     lastKeyCode=0;
+    displayWalzes(); // restore walzes if needed
     if (ledOn!=0){
       for (i=0;i<sizeof(led);i++){
 	if (HT.getLed(pgm_read_byte(led+i))){ // Check if it's set
@@ -3784,9 +3975,16 @@ void serialEvent() {
       if (inChar == '\r' ) { // treat carriage return as line feed
 	inChar='\n';
       }
+      if (inChar == '\b' || inChar == '\x7f' ) { //Backspace or DEL (using '\d' results in "d" instead of del)
+	if (serialInputBuffer.length()>0){
+	  serialInputBuffer.remove(serialInputBuffer.length() - 1, serialInputBuffer.length());
+	}
+	break;
+      }
+
       // add it to the serialInputBuffer:
       serialInputBuffer += inChar;
-      //      Serial.print((char)tolower(inChar)); // PSDEBUG
+
       // if the incoming character is a newline, set a flag
       // so the main loop can do something about it:
       //make sure we don't go to far, just force in a new line after MAXSERIALBUFF characters

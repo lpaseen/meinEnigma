@@ -30,6 +30,7 @@
  *  v0.03 - added crypto code
  *  v0.04 - added basic serial API
  *  v0.05 - added virtual plugboard, morsecode and almost all functions
+ *  v0.06 - added soundboard
  *
  *
  * TODO: a lot but some "highlights"...
@@ -90,6 +91,21 @@
  *
  *Milestone:
  *
+ *
+ *
+ *Port assignment:
+ * d0/d1 - Serial port
+ * d2,3,4,5,6,7 encoder
+ * d8,9 - soundboard io
+ * d10,11 encoder
+ * d12 - soundboard busy
+ * d13 - buzzer 
+ * a0,1,2,3 - decimal point
+ * a4,5 i2c
+ * a6 - switch
+ * a7 - big red button
+ *need one more pin for morsecode buzzer/soundboard busy
+ *
 */
 
 #include "ht16k33.h"
@@ -107,18 +123,23 @@ static const uint16_t EEPROMSIZE=1024;
 #ifdef SoundBoard
 #include <AltSoftSerial.h>
 AltSoftSerial altSerial;
-// AltSoftSerial always uses these pins:
+// for Atmega328 based boards AltSoftSerial always uses 
+//   pin 8 receive
+//   pin 9 transmit
+// these pins are hardwired in the chp and can NOT be changed, see http://forum.arduino.cc/index.php?topic=91499.0
 //
-// Board          Transmit  Receive   PWM Unusable
-// -----          --------  -------   ------------
-// Arduino Uno        9         8         10
 
-static const uint8_t vol30[10]        = {0x7E, 0xFF, 0x06, 0x06, 0x00, 0x00, 0x1E, 0xFE, 0xD7, 0xEF};
+//For sound module FN_M16P  AKA DFplayer
+#define BUSY 12
 
-static const uint8_t getState[10]     = {0x7E, 0xFF, 0x06, 0x42, 0x00, 0x00, 0x00, 0xFE, 0xB9, 0xEF};
-static const uint8_t getSDFileCnt[10] = {0x7E, 0xFF, 0x06, 0x48, 0x00, 0x00, 0x00, 0xFE, 0xB3, 0xEF};
-
-uint8_t play1[10]        = { 0X7E, 0xFF, 0x06, 0X03, 00, 00, 0x01, 0xFE, 0xF7, 0XEF};
+#define dfcmd_PLAYNO 0x03 // play the xth song
+#define dfcmd_PLAYNAME 0x12 // play song in /mp3 named nnnn*mp3
+#define dfcmd_VOLUME 0x06 // set volume
+#define dfcmd_RESET  0x0c // reset unit
+#define dfcmd_GETCNT 0x48 // get sd card file count
+#define dfcmd_GETSTATE 0x42 // get current status
+#define dfcmd_GETFEEDBACK 0x41 // get feedback from module
+uint8_t msgBuf[10]= { 0X7E, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0XEF};
 
 #endif
 
@@ -154,7 +175,7 @@ static const uint8_t morsecode[] PROGMEM={
   0b00001011,// Y
   0b00001100,// Z
 };
-#define spkPin 11
+#define spkPin 13
 //#define SPK // Speaker/Piezo or simple BEEP thingy
 
 //toneFq and timeBase as variabes so they can be changed in sw later
@@ -175,17 +196,17 @@ uint8_t timeBase; //ms to base all numbers on
 
 #define WALZECNT 4
 //if count is something else than 4 the pin this definitions (and several other things) also need to change
-static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {2, 3, 4, 5, 6, 7, 8, 9};
+static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {2, 3, 4, 5, 6, 7, 10,11};
 volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last change happened
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 
 //port that the big red button is on - to reset to factory defaults
-#define RESET 10
+#define RESET 7 ///"BIG RED BUTTON", reset button, actually a7 not d7
 
-//analog port that the switch is at
+///analog port that the switch is at
 #define Switch 6
-//How many positions the switch has
+///How many positions the switch has
 #define SwitchPositions 5
 // 5V/((SwitchPositions/1)*SwitchNo)
 // 0V=pos 0
@@ -197,26 +218,30 @@ volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 // 5 above than SwitchPos4
 
 #define maxADCval 1023
-#define SwitchPos1 (maxADCval/((SwitchPositions-1)*2))*1  // "run" - normal running mode, rightmost pos
-#define SwitchPos2 (maxADCval/((SwitchPositions-1)*2))*3  // Plugboard
-#define SwitchPos3 (maxADCval/((SwitchPositions-1)*2))*5  // "wheels" - select what wheel is where
-#define SwitchPos4 (maxADCval/((SwitchPositions-1)*2))*7  // "ukw" and "etw" (where that is an option) - which one and its psition (for the ones that can move)
-#define SwitchPos5 (maxADCval/((SwitchPositions-1)*2))*9  // "model" - select what enigma model, leftmost pos
+#define SwitchPos1 (maxADCval/((SwitchPositions-1)*2))*1  /// "run" - normal running mode, rightmost pos
+#define SwitchPos2 (maxADCval/((SwitchPositions-1)*2))*3  /// Plugboard
+#define SwitchPos3 (maxADCval/((SwitchPositions-1)*2))*5  /// "wheels" - select what wheel is where
+#define SwitchPos4 (maxADCval/((SwitchPositions-1)*2))*7  /// "ukw" and "etw" (where that is an option) - which one and its psition (for the ones that can move)
+#define SwitchPos5 (maxADCval/((SwitchPositions-1)*2))*9  /// "model" - select what enigma model, leftmost pos
 //6, OFF - leftmost position, powered off
-
+///
+///What mode the modeswitch currently is in and with that what mode to operate in
+///
 enum operationMode_t {run,plugboard,rotortype,ukw,model,none} operationMode;
-//Serial input stuff, arduino serial input buffer is 64 bytes
-//max allowed msg lengh is 250 characters plus some spaces = 300
-//Tried to make this buffer larger hoping to be able to capture long strings but it's still issues
-// possible due to delays in the main loop and speed it arrives at (64 bytes takes 0.55ms at 115200)
+///
+///Serial input stuff, arduino serial input buffer is 64 bytes
+///max allowed msg lengh is 250 characters plus some spaces = 300
+///Tried to make this buffer larger hoping to be able to capture long strings but it's still issues
+/// possible due to delays in the main loop and speed it arrives at (64 bytes takes 0.55ms at 115200)
+///
 #define MAXSERIALBUFF 150
-String serialInputBuffer = "";         // a string to hold incoming data
-boolean stringComplete = false;  // whether the string is complete
+String serialInputBuffer = "";         /// a string to hold incoming data
+boolean stringComplete = false;  /// whether the string is complete
 
-String msgCache = "";         // buffer to hold data while processing it
+String msgCache = "";         /// buffer to hold data while processing it
 
 typedef struct {
-  char letter[26];         // 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
+  char letter[26];         /// 26 to allow external Uhr box connected, then A->B doesn't mean B->A.
 } letters_t;
 
 
@@ -229,7 +254,9 @@ static uint8_t uhrpos=0;
 
 // wiring info comes from http://www.cryptomuseum.com/crypto/enigma/wiring.htm
 
-//26 letters and and a 6char name
+///
+///26 letters and and a 6char name
+///
 const char etw0[]   PROGMEM = "ABCDEFGHIJKLMNOPQRSTUVWXYZETW0  ";
 const char etwKBD[] PROGMEM = "QWERTZUIOASDFGHJKPYXCVBNMLETWKBD";
 const char etwJAP[] PROGMEM = "KZROUQHYAIGBLWVSTDXFPNMCJEETWJAP";
@@ -290,35 +317,37 @@ const char* const UKW[] PROGMEM =
 #endif
   };
 
-//Wiring followed by rollover notch(es)
-//Notch defined as the letter showing when it's at the notch, not the letter next to the physical notch
-//[0][0]is all letters in order and no notch (to define how many letters to start with)
-//After letters comes 4 letters to show when selected and button is pressed
+///
+///Wiring followed by rollover notch(es)
+///Notch defined as the letter showing when it's at the notch, not the letter next to the physical notch
+///[0][0]is all letters in order and no notch (to define how many letters to start with)
+///After letters comes 4 letters to show when selected and button is pressed
+///
 #define WALZEDISP 5
 //                                 ABCDEFGHIJKLMNOPQRSTUVWXYZwwwwSNN, wwww=walze display long, s=walze display short, Notch(Notch)
-const char walze0[]     PROGMEM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";        // 0= reference
-const char walzeI[]     PROGMEM = "EKMFLGDQVZNTOWYHXUSPAIBRCJ   I1Q";   // 1= military I
-const char walzeII[]    PROGMEM = "AJDKSIRUXBLHWTMCQGZNPYFVOE  II2E";   // 2= military II
-const char walzeIII[]   PROGMEM = "BDFHJLCPRTXVZNYEIWGAKMUSQO III3V";   // 3= military III
-const char walzeIV[]    PROGMEM = "ESOVPZJAYQUIRHXLNFTGKDCMWB  IV4J";   // 4= military IV
-const char walzeV[]     PROGMEM = "VZBRGITYUPSDNHLXAWMJQOFECK   V5Z";   // 5= military V
-const char walzeVI[]    PROGMEM = "JPGVOUMFYQBENHZRDKASXLICTW  VI6ZM";  // 6= military VI
-const char walzeVII[]   PROGMEM = "NZJHGRCXMYSWBOUFAIVLPEKQDT VII7ZM";  // 7= military VII
-const char walzeVIII[]  PROGMEM = "FKQHTLXOCBJSPDZRAMEWNIUYGVVIII8ZM";  // 8= military VIII
-const char walzeBeta[]  PROGMEM = "LEYJVCNIXWPBQMDRTAKZGFUHOSBETAB";    // 9= Beta
-const char walzeGamma[] PROGMEM = "FSOKANUERHMBTIYCWLQPZXVGJDGAMMG";    // 10= Gamma
+const char walze0[]     PROGMEM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";         /// 0= reference
+const char walzeI[]     PROGMEM = "EKMFLGDQVZNTOWYHXUSPAIBRCJ   I1Q";   /// 1= military I
+const char walzeII[]    PROGMEM = "AJDKSIRUXBLHWTMCQGZNPYFVOE  II2E";   /// 2= military II
+const char walzeIII[]   PROGMEM = "BDFHJLCPRTXVZNYEIWGAKMUSQO III3V";   /// 3= military III
+const char walzeIV[]    PROGMEM = "ESOVPZJAYQUIRHXLNFTGKDCMWB  IV4J";   /// 4= military IV
+const char walzeV[]     PROGMEM = "VZBRGITYUPSDNHLXAWMJQOFECK   V5Z";   /// 5= military V
+const char walzeVI[]    PROGMEM = "JPGVOUMFYQBENHZRDKASXLICTW  VI6ZM";  /// 6= military VI
+const char walzeVII[]   PROGMEM = "NZJHGRCXMYSWBOUFAIVLPEKQDT VII7ZM";  /// 7= military VII
+const char walzeVIII[]  PROGMEM = "FKQHTLXOCBJSPDZRAMEWNIUYGVVIII8ZM";  /// 8= military VIII
+const char walzeBeta[]  PROGMEM = "LEYJVCNIXWPBQMDRTAKZGFUHOSBETAB";    /// 9= Beta
+const char walzeGamma[] PROGMEM = "FSOKANUERHMBTIYCWLQPZXVGJDGAMAG";    /// 10= Gamma
 
 #ifdef NOMEMLIMIT
 //
-const char walzeNI[]    PROGMEM = "WTOKASUYVRBXJHQCPZEFMDINLGN  I1Q";    // 11= Norway Walze I
-const char walzeNII[]   PROGMEM = "GJLPUBSWEMCTQVHXAOFZDRKYNIN II2E";    // 12= Norway Walze II
-const char walzeNIII[]  PROGMEM = "JWFMHNBPUSDYTIXVZGRQLAOEKCNIII3V";    // 13= Norway Walze III
-const char walzeNIV[]   PROGMEM = "ESOVPZJAYQUIRHXLNFTGKDCMWBN IV4J";    // 14= Norway Walze IV
-const char walzeNV[]    PROGMEM = "HEJXQOTZBVFDASCILWPGYNMURKN  V5Z";    // 15= Norway Walze V
+const char walzeNI[]    PROGMEM = "WTOKASUYVRBXJHQCPZEFMDINLGN  I1Q";    /// 11= Norway Walze I
+const char walzeNII[]   PROGMEM = "GJLPUBSWEMCTQVHXAOFZDRKYNIN II2E";    /// 12= Norway Walze II
+const char walzeNIII[]  PROGMEM = "JWFMHNBPUSDYTIXVZGRQLAOEKCNIII3V";    /// 13= Norway Walze III
+const char walzeNIV[]   PROGMEM = "ESOVPZJAYQUIRHXLNFTGKDCMWBN IV4J";    /// 14= Norway Walze IV
+const char walzeNV[]    PROGMEM = "HEJXQOTZBVFDASCILWPGYNMURKN  V5Z";    /// 15= Norway Walze V
 //
-const char walzeSKI[]    PROGMEM = "PEZUOHXSCVFMTBGLRINQJWAYDKK  I1Y";    // 16= Swiss Walze I
-const char walzeSKII[]   PROGMEM = "ZOUESYDKFWPCIQXHMVBLGNJRATK II2E";    // 17= Swiss Walze II
-const char walzeSKIII[]  PROGMEM = "EHRVXGAOBQUSIMZFLYNWKTPDJCKIII3N";    // 18= Swiss Walze III
+const char walzeSKI[]    PROGMEM = "PEZUOHXSCVFMTBGLRINQJWAYDKK  I1Y";    /// 16= Swiss Walze I
+const char walzeSKII[]   PROGMEM = "ZOUESYDKFWPCIQXHMVBLGNJRATK II2E";    /// 17= Swiss Walze II
+const char walzeSKIII[]  PROGMEM = "EHRVXGAOBQUSIMZFLYNWKTPDJCKIII3N";    /// 18= Swiss Walze III
 #endif
 
 //
@@ -430,27 +459,32 @@ uint8_t debugMask=0;
 //NOTE: "M3" and "M4" is operational procedure, NOT number of wheels (or "M1" would have just 1 wheel :/ ),
 //      it just happens to match up and is commonly used to represent 3 wheel or 4 wheel models
 
+//
 // Several enigma models and their wheel count & wiring
 // http://www.cryptomuseum.com/crypto/enigma/wiring.htm
-
+//
 typedef enum {
-  fixed,	// fixed, one or more to choose from but not moving and wires not changing
-  program,	// wires can be changed around, ukw-D
-  rotate} ukw_t; // one or more to choose from but it can be moved around, looks like a 4th rotor.
+  fixed,	 /// fixed, one or more to choose from but not moving and wires not changing
+  program,	 /// wires can be changed around, ukw-D
+  rotate} ukw_t; /// one or more to choose from but it can be moved around, looks like a 4th rotor.
 
 typedef enum {
   virtualpb,
   physicalpb,
   config
 } vpb_t;
-
+///
+/// a list of valid enigma models
+///
 typedef enum {
   FIRST,
   EnigmaI,
   M3,
   M4,
+#ifdef NOMEMLIMIT
   NorwayEnigma,
   SwissK,
+#endif
   /* to be added
   EnigmaG,
   G31AbwehrEnigmaG312,
@@ -590,21 +624,21 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
 //also note that MAXPRESET*SETTINGSIZE < EEPROM.length()
 
 typedef struct {
-  uint8_t   fwVersion;         // firmware version
+  uint8_t   fwVersion;         /// firmware version
   enigmaModel_t model;
-  uint8_t   ukw;               // Umkehrwalze - what reflector that is loaded
-  uint8_t   walze[WALZECNT];   // what wheel that currently is in the 3 or 4 positions
-  uint8_t   etw;               // Eintrittswalze - entry wheel, always 1 for military enigma.
-  int8_t    ringstellung[WALZECNT]; // Setting of the wheel ring, left to right, 0-sizeof(walze[0]) not the letters!
-  vpb_t     plugboardMode;     // if virtual plugboard is enabled or not. 
+  uint8_t   ukw;               /// Umkehrwalze - what reflector that is loaded
+  uint8_t   walze[WALZECNT];   /// what wheel that currently is in the 3 or 4 positions
+  uint8_t   etw;               /// Eintrittswalze - entry wheel, always 1 for military enigma.
+  int8_t    ringstellung[WALZECNT]; /// Setting of the wheel ring, left to right, 0-sizeof(walze[0]) not the letters!
+  vpb_t     plugboardMode;     /// if virtual plugboard is enabled or not. 
   letters_t plugboard;
-  int8_t    currentWalze[WALZECNT]; // current position of the wheel, 0-sizeof(walze[0]) not the letters!
-  uint8_t   grpsize;            // Size of groups to print out over serial
-  boolean   morseCode;		// Send morsecode or not
+  int8_t    currentWalze[WALZECNT]; /// current position of the wheel, 0-sizeof(walze[0]) not the letters!
+  uint8_t   grpsize;            /// Size of groups to print out over serial
+  boolean   morseCode;		/// Send morsecode or not
   unsigned int checksum;
 } machineSettings_t;
-unsigned long odometer;      // How many characters this unit has en/decrypted
-unsigned long serialNumber;  // static number stored in eeprom and set with other means than this program
+unsigned long odometer;      /// How many characters this unit has en/decrypted
+unsigned long serialNumber;  /// static number stored in eeprom and set with other means than this program
 
 /********************************/
 
@@ -613,6 +647,7 @@ enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;
 boolean standalone=false;	// If standalone (no hardware, just serialAPI)
+int8_t  resetLevel=100; // threashold for reset, put as env to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
 int8_t lastKey; // last key pressed, needed to pass the info between subroutines
@@ -708,7 +743,9 @@ static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need SPI so use analog por
 //static uint8_t   dpStatus;
 
 /****************************************************************/
-// Write a single byte to i2c
+///
+/// Write a single byte to i2c
+///
 uint8_t i2c_write(uint8_t unitaddr,uint8_t val){
   Wire.beginTransmission(unitaddr);
   Wire.write(val);
@@ -716,7 +753,9 @@ uint8_t i2c_write(uint8_t unitaddr,uint8_t val){
 }
 
 /****************************************************************/
-// Write two bytes to i2c
+///
+///Write two bytes to i2c
+///
 uint8_t i2c_write2(uint8_t unitaddr,uint8_t val1,uint8_t val2){
   Wire.beginTransmission(unitaddr);
   Wire.write(val1);
@@ -725,7 +764,9 @@ uint8_t i2c_write2(uint8_t unitaddr,uint8_t val1,uint8_t val2){
 }
 
 /****************************************************************/
-// read a byte from specific address (send one byte(address to read) and read a byte)
+///
+/// read a byte from specific address (send one byte(address to read) and read a byte)
+///
 uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
   i2c_write(unitaddr,addr);
   Wire.requestFrom(unitaddr,1);
@@ -733,8 +774,10 @@ uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
 }
 
 /****************************************************************/
-// read 2 bytes starting at a specific address
-// read is done in two sessions - as required by mcp23017 (page 5 in datasheet)
+///
+/// read 2 bytes starting at a specific address
+/// read is done in two sessions - as required by mcp23017 (page 5 in datasheet)
+///
 uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
   uint16_t val;
   i2c_write(unitaddr,addr);
@@ -747,19 +790,52 @@ uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
 
 #ifdef SoundBoard
 /****************************************************************/
-//Read data from soundboard
-//
+///
+///Read data from soundboard
+///
 void readData() {
+  uint8_t i;
+  int j;
+  char ch;
+
+  i = 0;
+  j = 0;
+  do {
+    ch = altSerial.read();
+    if (altSerial.available()){
+      ch=altSerial.read();
+      i++;
+      if (ch >= 0 && ch < 10) {
+	Serial.print(F("0"));
+      }
+      Serial.print(ch, HEX);
+      Serial.print(F(" "));
+      j=0; // reset timeout counter
+    }else{
+      j++;
+      delay(1);
+    }
+  } while (j < 1000); // about 1 seconds timeout
+
+  Serial.println();
+} // readData
+
+/****************************************************************/
+///
+///Read data from soundboard
+///
+void readData2() {
   uint8_t i;
   int j;
   char ch;
 
   j = 0;
   do {
-    ch = altSerial.read();
+    ch = altSerial.read();    
     j++;
-    delay(100);
-  } while (ch == -1 && j < 100); // about 10 seconds timeout
+    delay(1);
+  } while (ch == -1 && j < 1000); // about 1 seconds timeout
+
   //PSDEBUG
   for (i = 0; i < 6; i++) {
     ch = altSerial.read();
@@ -775,45 +851,109 @@ void readData() {
 /****************************************************************/
 //write data to soundboard
 //
-void writeData(uint8_t fileno, uint8_t size) {
+void sendCommand(uint8_t cmd, uint16_t opt=0) {
   uint8_t i;
   uint16_t csum;
 
-  csum=0;
-  for (i = 0; i < size-3; i++) {
-    altSerial.write( play1[i] );
-    csum+=play1[i];
+  //Page 6 of http://www.trainelectronics.com/Arduino/MP3Sound/TalkingTemperature/FN-M16P%20Embedded%20MP3%20Audio%20Module%20Datasheet.pdf
+  // http://www.picaxe.com/docs/spe033.pdf
+  msgBuf[0]=0x7e; // start
+  msgBuf[1]=0xff; // version
+  msgBuf[2]=6;    // Lenght = always 6
+  msgBuf[3]=cmd;  // Command
+  msgBuf[4]=0;    // Feedback with 0x41, 0 if no and 1 if yes
+  msgBuf[5]=opt >> 8; // optional value high byte
+  msgBuf[6]=opt & 0xFF; // optional value low byte
+  csum=0-(msgBuf[1]+msgBuf[2]+msgBuf[3]+msgBuf[4]+msgBuf[5]+msgBuf[6]);
+  msgBuf[7]=csum >>8;
+  msgBuf[8]=csum & 0xFF;
+  msgBuf[9]=0xEF; // end
+
+  for (i = 0; i < 10; i++) {
+    altSerial.write( msgBuf[i] );
   }
-  csum=(0-csum) & 0xffff;
-  altSerial.write(csum >>8);
-  altSerial.write(csum & 0xFF);
-  altSerial.write(0xEF);
+#ifdef DEBUG
+  Serial.println();
+  for (i = 0; i < 10; i++) {
+    Serial.print(msgBuf[i],HEX);Serial.print(" ");
+  }
+  Serial.println();
+#endif
 } // writeData
 
 
 /****************************************************************/
 //write data to soundboard
 //
-void playSong(uint8_t fileno) {
-  uint8_t i;
-  uint16_t csum;
+void playSong(uint16_t fileno, boolean sync=true) {
+  int16_t cnt;
+  uint8_t retry;
 
-
-  //Page 6 of http://www.trainelectronics.com/Arduino/MP3Sound/TalkingTemperature/FN-M16P%20Embedded%20MP3%20Audio%20Module%20Datasheet.pdf
-  csum=0;
-  play1[5]=fileno>>8;
-  play1[6]=fileno & 0xFF;
-  for (i = 0; i < 10-3; i++) {
-    altSerial.write( play1[i] );
-    csum+=play1[i];
-  }
-  csum=(0-csum) & 0xffff;
-  altSerial.write(csum >>8);
-  altSerial.write(csum & 0xFF);
-  altSerial.write(0xEF);
-} // writeData
+#ifdef DEBUG
+  Serial.print("Busy before: ");
+  Serial.print(digitalRead(BUSY));
 #endif
 
+  cnt=0;
+  while (digitalRead(BUSY) == LOW && cnt<300){cnt++;delay(10);}
+
+#ifdef DEBUG
+  Serial.print(", after wait ");
+  Serial.print(digitalRead(BUSY));
+  Serial.print(" wait cnt ");
+  Serial.print(cnt);
+  Serial.print(", ");
+#endif
+
+  retry=3;
+  do {
+    //Send play command
+    //    sendCommand(dfcmd_PLAYNO,fileno);
+    sendCommand(dfcmd_PLAYNAME,fileno);
+    //Wait for it to start playing
+    cnt=0;
+    while (digitalRead(BUSY) == HIGH && cnt<100){cnt++;delay(1);}
+#ifdef DEBUG
+    Serial.print(" start play: ");
+    Serial.print(cnt);
+#endif
+    retry--;
+  } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
+
+#ifdef DEBUG
+  Serial.print(", busy playing: ");
+  Serial.print(digitalRead(BUSY));
+#endif
+  if (sync){
+    //Wait for it to finish playing
+    cnt=0;
+    while (digitalRead(BUSY) == LOW && cnt<300){
+      cnt++;
+      delay(10);
+    };
+    
+#ifdef DEBUG
+    Serial.print(", playtime ");
+    Serial.print(cnt);
+    
+    Serial.print(" Busy after: ");
+    Serial.println(digitalRead(BUSY));
+#endif
+  } // if sync
+} // playSong
+
+/****************/
+void playSongVerbose(uint16_t i){
+    Serial.print(F("Playing song no "));
+    Serial.println(i);
+    playSong(i);
+    Serial.print(F(" Done playing song no "));
+    Serial.println(i);
+    Serial.println();
+}
+
+#endif
+//endif SoundBoard
 
 /****************************************************************/
 //Get a single character from a specific wheel and wheel position
@@ -1634,20 +1774,24 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.println(F("My enigma v0.05"));
+  Serial.println(F("My enigma v0.06"));
   Serial.println();
 
 #ifdef SoundBoard
   altSerial.begin(9600);
-  delay(2000); // give the module time to initialize
+  sendCommand(dfcmd_RESET,0); // reset unit
 
+  i=0;
+  while (altSerial.available()<10 && i<50){
+    i++;
+    delay(100);
+  }
+  Serial.println(i);
   readData(); // read status
-
   //PSDEBUG
-  readData(); // read status
-  //PSDEBUG
-  Serial.println(F("Playing no 1"));
-  writeData(1);
+  //  Serial.println(F("setting vol 20"));
+  sendCommand(dfcmd_VOLUME,30);
+  playSong(1201,false);
 #endif
 
 #ifdef TESTCRYPTO
@@ -1670,18 +1814,18 @@ void setup() {
     Serial.println(F(") keeping the values"));
   }
 
-  pinMode(RESET,INPUT_PULLUP);
   //Check if the big red button is pressed
-  if (digitalRead(RESET)== LOW){
+  if (analogRead(RESET) < resetLevel){
+    Serial.println(F(" RESET "));
     eraseEEPROM();
   }
-
   copyEnigmaModel(settings.model);
 
   Wire.begin(); // enable the wire lib
 
   //Check for plugboard
   Wire.beginTransmission(mcp_address);
+
   if (Wire.endTransmission()==0){
     Serial.println(F("Preparing plugboard"));
     // Setup the port multipler
@@ -1723,12 +1867,12 @@ void setup() {
     decimalPoint(i,true);
   }
 
-  if (digitalRead(RESET)== LOW){
-    Serial.println(F("EEPROM settings erased"));
-    while (digitalRead(RESET)== LOW){}
-  } else {
-    delay(500);
-  }
+  if (analogRead(RESET) < resetLevel){
+      Serial.println(F("EEPROM settings erased"));
+      while (analogRead(RESET) < resetLevel){}
+    } else {
+      delay(500);
+    }
 
   Serial.println(F("All LEDs OFF"));
   for (i=0;i<sizeof(HT.displayRam);i++)
@@ -1762,10 +1906,12 @@ void setup() {
     if ((i%2)==0){
       if (!HT.getLed(i,true)){
 	standalone=true;
+	resetLevel=-1;//disable the reset button
       }
     } else {
       if (HT.getLed(i,true)){
 	standalone=true;
+	resetLevel=100;//enable the reset button
       }
     }
   }
@@ -1890,12 +2036,12 @@ void setup() {
 PGM_P my_strstr(PGM_P s1,char* s2){
   
   uint8_t i, j;
-  char ch;
+  char ch='a';
     
   if ((s1 == NULL || s2 == NULL))
     return NULL;
 
-  ch=pgm_read_byte_near(s1+i);
+  //  ch=pgm_read_byte_near(s1+i);
   for( i = 0; ch != '\0'; i++){
     ch=pgm_read_byte_near(s1+i);
     if (ch == s2[0]) { //does the beginning match?
@@ -3017,20 +3163,21 @@ void parseCommand() {
     command starts with "!"
     a ":" separate command from values
     nothing after ":" means show current setting
+    any command can be shortened until it's unique
     Commands;
-    !M[ODEL]
-    !SE[TTINGS]
-    !U[KW]
-    !W[ALZE]
-    !R[ING]
-    !ST[ART]
-    !PL[UGBOARD]
-    !DUKW
-    !SA[VE]
-    !LOA[D]
-    !LOG[LEVEL]
-    !D[EBUG]
-    !V[ERBOSE]
+    !MODEL
+    !SETTINGS
+    !UKW
+    !ROTOR
+    !RING
+    !START
+    !PLUGBOARD
+    !GROUP
+    !SAVE
+    !LOAD
+    !LOGLEVEL
+    !DEBUG
+    !VERBOSE
     !DUKW
     "#" as input is treated as a comment and ignored
     "# as output is respond to a command
@@ -3047,15 +3194,15 @@ void parseCommand() {
     #Settings; M3:B:I-II-III:AAA:AAA:
     !UKW: B
     #UKW:B
-    !WALZE: VII-I-IV
-    #WALZE:VII-I-IV
+    !ROT: VII-I-IV
+    #ROTOR:VII-I-IV
     !WALZE: 6,1,3
     #WALZE:VI-I-III
     !RING: A B C
     #RING:A B C
     !PLUGBOARD: TH EQ UI CK BR OW NF XJ MP SV
     #PLUGBOARD:BR CK EQ MP NF OW SV TH UI XJ
-    !START: F S F
+    !START: FSF
     #Rotor start set to: F S F
     !SETTINGS:
     #SETTINGS:M3,B,VI-I-III,ABC,FSF,BR CK EQ MP NF OW SV TH UI XJ
@@ -3412,7 +3559,7 @@ void loop() {
   static uint8_t ledOn=0;
   uint8_t i,pos;
   int8_t key;
-  uint16_t val,cnt;
+  uint16_t val,cnt=0;
   char j,ench,ch;
   static int16_t prevFreeRam;
   int16_t freeNow;
@@ -3437,7 +3584,7 @@ void loop() {
 #endif
 
   //Check if emergency erase is pressed
-  if (digitalRead(RESET)== LOW){
+  if (analogRead(RESET) < resetLevel){
     eraseEEPROM();
     for (i = 0; i < 128; i++) {
       HT.setLed(i);
@@ -3572,12 +3719,11 @@ void loop() {
       Serial.println((char)lastKeyCode);
     }
   } else { // no key pressed
-    if ( cnt ==2 ){
-      cnt++;
+    //PSDEBUG - what is going on here ??? why ==2 and why no =0 ?
+    if ( cnt == 2 ){
       displayWalzes();
-    } else {
-      cnt++;
     }
+    cnt++;
   } // if key!=0;else
 
   if (HT.keysPressed()==1) { // how many keys are pressed?
@@ -3666,6 +3812,51 @@ void loop() {
 	checkPlugboard();
 	rotateWheel();
 	ench=encrypt(pgm_read_byte(&scancodes[0]+key-1));
+#ifdef SoundBoard
+	//should probably assign different part of they keyboard to different sound
+	//for example left keys on bottom row has 1001, right keys has 1002 and so on
+	//	playSong(random(1001,1007),false);
+	switch (pgm_read_byte(&scancodes[0]+key-1)) {
+	case 'Q':
+	case 'W':
+	case 'E':
+	case 'R':
+	case 'T':
+	  playSong(1001,false);
+	  break;
+	case 'A':
+	case 'S':
+	case 'D':
+	case 'F':
+	  playSong(1002,false);
+	  break;
+	case 'P':
+	case 'Y':
+	case 'X':
+	case 'C':
+	  playSong(1003,false);
+	  break;
+	case 'Z':
+	case 'U':
+	case 'I':
+	case 'O':
+	  playSong(1004,false);
+	  break;
+	case 'G':
+	case 'H':
+	case 'J':
+	case 'K':
+	  playSong(1005,false);
+	  break;
+	case 'V':
+	case 'B':
+	case 'N':
+	case 'M':
+	case 'L':
+	  playSong(1006,false);
+	  break;
+	}
+#endif
 	Serial.print(ench);
 	ledOn=pgm_read_byte(led+ench-'A');
 	if (logLevel>1){

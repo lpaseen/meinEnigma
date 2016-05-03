@@ -31,6 +31,7 @@
  *  v0.04 - added basic serial API
  *  v0.05 - added virtual plugboard, morsecode and almost all functions
  *  v0.06 - added soundboard
+ *  v0.07 - added clock
  *
  *
  * TODO: a lot but some "highlights"...
@@ -119,6 +120,7 @@ static const uint16_t EEPROMSIZE=1024;
 #include <avr/pgmspace.h>
 #endif
 
+//Sound code size:29714-27838=1876
 #define SoundBoard
 #ifdef SoundBoard
 #include <AltSoftSerial.h>
@@ -143,6 +145,12 @@ uint8_t msgBuf[10]= { 0X7E, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0XEF};
 
 #endif
 
+//Clock code size:29714-28986=728
+#define CLOCK
+#ifdef CLOCK
+#define DS3231_ADDR 0x68
+static uint8_t clock_active=0;
+#endif
 
 /****************/
 //Morse code stuff
@@ -715,9 +723,6 @@ const byte led[] PROGMEM = {12,22,24,14,9,15,28,29,4,30,31,19,20,21,3,27,11,8,13
 //How the plugboard is mapped
 //[0] is first input port on first mcp23017
 // (char)pgm_read_byte(&steckerbrett[0]+key-1)
-//                                   00000000001111111111222222
-//                                   01234567890123456789012345
-//const byte steckerbrett[] PROGMEM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; //Place holder until final wiring is done
 //with steckerbrett as A-Z the plugboard ends up as
 // YVSPMJGDA
 //  WTQNKHEB
@@ -732,15 +737,14 @@ const byte led[] PROGMEM = {12,22,24,14,9,15,28,29,4,30,31,19,20,21,3,27,11,8,13
 //  P   Y   X   C   V   B   N   M   L
 // 25  23  20  17  14  11  08  05  02
 //
+//                                   00000000001111111111222222
+//                                   01234567890123456789012345
 const byte steckerbrett[] PROGMEM = "OKLIJMUHNZGBTFVRDCESXWAYQP"; // 
 //
 
 //Decimal points are handled outside the ht16k33 (not enough wires).
 //they are wired to analog io pins on the arduino and then some hardware that is in between will light up the correct leds decimal point at the right moment
-static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need SPI so use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 is switch, a7 free but not digital.)
-
-// bitmapped decimal point, bit0=0 means dp on for leftmost(0) wheel
-//static uint8_t   dpStatus;
+static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need to use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 is switch, a7 is big red button.)
 
 /****************************************************************/
 ///
@@ -787,7 +791,6 @@ uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
   return Wire.read()<<8|val;
 }
 
-
 #ifdef SoundBoard
 /****************************************************************/
 ///
@@ -820,33 +823,6 @@ void readData() {
   Serial.println();
 } // readData
 
-/****************************************************************/
-///
-///Read data from soundboard
-///
-void readData2() {
-  uint8_t i;
-  int j;
-  char ch;
-
-  j = 0;
-  do {
-    ch = altSerial.read();    
-    j++;
-    delay(1);
-  } while (ch == -1 && j < 1000); // about 1 seconds timeout
-
-  //PSDEBUG
-  for (i = 0; i < 6; i++) {
-    ch = altSerial.read();
-    if (ch >= 0 && ch < 10) {
-      Serial.print(F("0"));
-    }
-    Serial.print(ch, HEX);
-    Serial.print(F(" "));
-  }
-  Serial.println();
-} // readData
 
 /****************************************************************/
 //write data to soundboard
@@ -889,21 +865,9 @@ void playSong(uint16_t fileno, boolean sync=true) {
   int16_t cnt;
   uint8_t retry;
 
-#ifdef DEBUG
-  Serial.print("Busy before: ");
-  Serial.print(digitalRead(BUSY));
-#endif
-
   cnt=0;
+  //Make sure it's done playing
   while (digitalRead(BUSY) == LOW && cnt<300){cnt++;delay(10);}
-
-#ifdef DEBUG
-  Serial.print(", after wait ");
-  Serial.print(digitalRead(BUSY));
-  Serial.print(" wait cnt ");
-  Serial.print(cnt);
-  Serial.print(", ");
-#endif
 
   retry=3;
   do {
@@ -913,19 +877,12 @@ void playSong(uint16_t fileno, boolean sync=true) {
     //Wait for it to start playing
     cnt=0;
     while (digitalRead(BUSY) == HIGH && cnt<100){cnt++;delay(1);}
-#ifdef DEBUG
-    Serial.print(" start play: ");
-    Serial.print(cnt);
-#endif
     retry--;
   } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
 
-#ifdef DEBUG
-  Serial.print(", busy playing: ");
-  Serial.print(digitalRead(BUSY));
-#endif
   if (sync){
     //Wait for it to finish playing
+    //it's just small snippets so it shouldn't take to long
     cnt=0;
     while (digitalRead(BUSY) == LOW && cnt<300){
       cnt++;
@@ -936,21 +893,9 @@ void playSong(uint16_t fileno, boolean sync=true) {
     Serial.print(", playtime ");
     Serial.print(cnt);
     
-    Serial.print(" Busy after: ");
-    Serial.println(digitalRead(BUSY));
 #endif
   } // if sync
 } // playSong
-
-/****************/
-void playSongVerbose(uint16_t i){
-    Serial.print(F("Playing song no "));
-    Serial.println(i);
-    playSong(i);
-    Serial.print(F(" Done playing song no "));
-    Serial.println(i);
-    Serial.println();
-}
 
 #endif
 //endif SoundBoard
@@ -961,7 +906,6 @@ void playSongVerbose(uint16_t i){
 //   ch=getWalzeChar(&WALZE[wheel],pos)
 
 char getWalzeChar(const char* const *theWheel, uint8_t pos){
-  
   // inner pgm_read_word gets the pointer to the beginning of the alphabet string
   // then add the position to that and read whats there to get the character we want
   return (char)pgm_read_byte(pgm_read_word(theWheel)+pos);
@@ -1421,6 +1365,12 @@ void setConfig(enigmaModel_t model,
   parsePlugboard(plugboard);
 } // setConfig
 
+#ifdef CLOCK
+uint8_t bcd2dec(uint8_t bcd){
+  return ((bcd/16 * 10) + (bcd % 16));
+} //bcd2dec
+#endif
+
 //#define DEBUGWL
 /****************************************************************/
 // display something on one of the "wheels"
@@ -1496,6 +1446,9 @@ void displayWalzes(){
   static const char virt[] PROGMEM ="VIRT";
   uint8_t i;
   char ch;
+#ifdef CLOCK
+  static uint16_t hourminute;
+#endif
 
   for (i=0;i<WALZECNT;i++){
     // **************** RUN ****************
@@ -1545,7 +1498,24 @@ void displayWalzes(){
 
       // **************** MODEL ****************
     } else if (operationMode==model) {
+#ifdef CLOCK
+      if (clock_active != 0){
+	if (i==0){
+	  decimalPoint(1,i2c_read(DS3231_ADDR,0) & 1);
+	  hourminute=i2c_read2(DS3231_ADDR,1);
+	}
+	if (i==0 && (hourminute>>((3-i)*4) & 0xF)==0){
+	    displayLetter(' ',i);
+	  }else{
+	    displayLetter((hourminute>>((3-i)*4) & 0xF)+'0',i);
+	  }
+      } else {
+#endif
       displayLetter(EnigmaModel.display[i],i);
+#ifdef CLOCK
+      }
+#endif
+
 #ifdef NOMEMLIMIT
     } else {
       if (i==0){
@@ -1774,7 +1744,7 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.println(F("My enigma v0.06"));
+  Serial.println(F("My enigma v0.07"));
   Serial.println();
 
 #ifdef SoundBoard
@@ -1786,12 +1756,12 @@ void setup() {
     i++;
     delay(100);
   }
-  Serial.println(i);
-  readData(); // read status
+  //  Serial.println(i);
+  //  readData(); // read status
   //PSDEBUG
   //  Serial.println(F("setting vol 20"));
   sendCommand(dfcmd_VOLUME,30);
-  playSong(1201,false);
+  //  playSong(1201,false); // "meinEnigma starting up"
 #endif
 
 #ifdef TESTCRYPTO
@@ -1822,6 +1792,12 @@ void setup() {
   copyEnigmaModel(settings.model);
 
   Wire.begin(); // enable the wire lib
+
+#ifdef CLOCK
+  uint16_t minute=i2c_read2(DS3231_ADDR,1);
+  Serial.print(F("Time is :"));Serial.println(minute,HEX);
+#endif
+
 
   //Check for plugboard
   Wire.beginTransmission(mcp_address);
@@ -2299,6 +2275,9 @@ boolean checkWalzes() {
     {' ',' '},
     {' ',' '},
   };
+#ifdef CLOCK
+  static uint8_t hour,minute;
+#endif
 
   changed=false; // no wheel has changed
   for (walzeNo = 0; walzeNo < WALZECNT; walzeNo++) {
@@ -2557,21 +2536,107 @@ boolean checkWalzes() {
 	  
 	  // **************** MODEL ****************
 	} else if (operationMode==model){
-	  if (walzeNo==0){ // only change walze on leftmost rotor (just like UKW)
-	    // Is this the best way to deal with this ? - going prev/next in a enum list
-	    if (direction==up){
-	      settings.model=(enigmaModel_t)((int)settings.model-1);
-	      if (settings.model<=FIRST){
-		settings.model=(enigmaModel_t)((int)LAST-1);
+#ifdef CLOCK
+	  if (clock_active!=0){
+	    hour=i2c_read(DS3231_ADDR,2);
+	    minute=i2c_read(DS3231_ADDR,1);
+	    //	    Serial.print(F("HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.print(minute,HEX);	//PSDEBUG
+	    hour=((hour>>4)*10 + (hour & 0xf));//bcd 2 dec
+	    minute=((minute>>4)*10 + (minute & 0xf)); //bcd 2 dec
+	    //	    Serial.print(F("   -  decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.println(minute,DEC);  //PSDEBUG
+
+	    //hour range
+	    if (walzeNo==0){
+	      if (direction==up){
+		if (hour<20){
+		  hour+=10;
+		}else{
+		  hour = hour%10;
+		}
+	      } else { // going down
+		if (hour<10){
+		  hour=23;
+		}else{
+		  hour-=10;
+		}
 	      }
-	    }else{
-	      settings.model=(enigmaModel_t)((int)settings.model+1);
-	      if (settings.model>=LAST){
-		settings.model=(enigmaModel_t)((int)FIRST+1);
+	    } else if (walzeNo==1){
+	      if (direction==up){
+		if (hour%10 == 9){
+		  hour-=9;
+		}else{
+		  hour++;
+		}
+	      } else { // going down
+		if (hour%10 == 0){
+		  hour+=9;
+		}else{
+		  hour--;
+		}
 	      }
-	    }  // if direction 
-	    copyEnigmaModel(settings.model);
-	  } // if walze=0
+	      //Minute range
+	    } else if (walzeNo==2){
+	      if (direction==up){
+		if (minute<50){
+		  minute+=10;
+		}else{
+		  minute = minute%10;
+		}
+	      } else { // going down
+		if (minute<10 ){
+		  minute+=50;
+		}else{
+		  minute-=10;
+		}
+	      }
+	    } else if (walzeNo==3){
+	      if (direction==up){
+		if ((minute %10) == 9){
+		  minute-=9;
+		}else{
+		  minute++;
+		}
+	      } else { // going down
+		if ((minute%10) == 0){
+		  minute+=9;
+		}else{
+		  minute--;
+		}
+	      }
+	    }
+	    if (hour>23)
+	      hour=23;
+	    if (minute>59)
+	      minute=59;
+
+	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC);  //PSDEBUG
+	    hour=(hour/10*16)+(hour%10); // dec 2 bcd
+	    minute=(minute/10*16)+(minute%10); // dec 2 bcd
+	    //	    Serial.print(F(" - HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.println(minute,HEX);Serial.println(); //PSDEBUG
+	    i2c_write2(DS3231_ADDR,2,hour);
+	    i2c_write2(DS3231_ADDR,1,minute);
+	    i2c_write2(DS3231_ADDR,0,0); //seconds
+	  }else{
+#endif
+	    if (walzeNo==0){ // only change walze on leftmost rotor (just like UKW)
+	      // Is this the best way to deal with this ? - going prev/next in a enum list
+	      if (direction==up){
+		settings.model=(enigmaModel_t)((int)settings.model-1);
+		if (settings.model<=FIRST){
+		  settings.model=(enigmaModel_t)((int)LAST-1);
+		}
+	      }else{
+		settings.model=(enigmaModel_t)((int)settings.model+1);
+		if (settings.model>=LAST){
+		  settings.model=(enigmaModel_t)((int)FIRST+1);
+		}
+	      }  // if direction 
+	      copyEnigmaModel(settings.model);
+            } // if walze=0
+#ifdef CLOCK
+         }
+#endif
+
 	  //BUG: Need to handle presets here
 	} // if op=model
       } // if direction != none
@@ -3567,6 +3632,10 @@ void loop() {
   char strBuffer[11];
   HT16K33::DisplayRam_t prevRamState;
 
+#ifdef CLOCK
+  uint16_t hourminute;
+#endif
+
 #ifdef PSDEBUG
   //PSDEBUG
   freeNow=freeRam();
@@ -3776,7 +3845,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version
-	  displayString("V005",0);
+	  displayString("V007",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);
@@ -3795,6 +3864,34 @@ void loop() {
 	  displayString(strBuffer,400);
 	  delay(2000);
 	  break;
+
+#ifdef CLOCK
+	case 'C': // Show clock
+	  if (clock_active==0){
+	    clock_active=1;
+	  }else{
+	    clock_active=0;
+	  }
+	  hourminute=i2c_read2(DS3231_ADDR,1);
+	  Serial.print(F("Time is :"));Serial.print(hourminute >>8 & 0xFF,HEX);Serial.print(F(":"));Serial.println(hourminute & 0xFF,HEX);
+
+	  //PSDEBUG
+	  //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
+	  //	  for (i=0;i<4;i++){
+	  //	    Serial.print(F("DEBUG "));Serial.print(i);Serial.print(":");Serial.print((3-i)*4,DEC);Serial.print(F(">"));Serial.println((hourminute>>((3-i)*4) & 0xF),HEX);
+	  //	  }
+	  /* PSDEBUG
+	  Serial.print(F("DEBUG :"));
+	  for (i=0;i<0x12;i++){
+	    minute=i2c_read(DS3231_ADDR,i);
+	    if (minute<0x10)
+	      Serial.print(F("0"));
+	    Serial.print(minute,HEX);Serial.print(F(":"));
+	  }
+	  Serial.println();
+	  */
+	  break;
+#endif
 
 	} // switch
 	for (i=0;i<sizeof(prevRamState);i++){HT.displayRam[i]=prevRamState[i];} // Restore current state

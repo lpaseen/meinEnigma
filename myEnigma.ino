@@ -699,26 +699,39 @@ HT16K33 HT;
 //Keyboard scancode table
 //A-Z for keyboard, 0-3 for buttons under walze 0-3
 //(char)pgm_read_byte(&scancodes[0]+key-1)
+#define PROTOTYPE
+#ifdef PROTOTYPE
 const char scancodes[] PROGMEM = "OIUZTREWQGHJKLMNBVCXYPASDF0123";
-
 //  9  8  7  6  5  4  3  2  1
 //   23 24 25 26 10 11 12 13 
 // 22 21 20 19 18 17 16 15 14 
+#else
+//Prod board
+const char scancodes[] PROGMEM = "QWERTZUIOASDFPYXCVBNMLGHJK0123";
+//  1  2  3  4  5  6  7  8  9
+//   10 11 12 13 23 24 25 26 
+// 14 15 16 17 18 19 20 21 22
+#endif
+
 //
 
 //A=65 so the [0] element contain the number of the LED that shows "A"
 //after 'Z'-65 comes control LEDs [\]^_
 //Usage: led['A'-65] or led[char-65]
 //	pgm_read_byte(led+'A'-65));
+#ifdef PROTOTYPE
 const byte led[] PROGMEM = {12,22,24,14,9,15,28,29,4,30,31,19,20,21,3,27,11,8,13,7,5,23,10,25,26,6};
+#else
+const byte led[] PROGMEM = {12, 24, 22, 14,  5, 15, 28, 29, 10, 30, 31, 27, 26, 25, 11, 19,  3,  6, 13,  7,  9, 23,  4, 21, 20,  8};
 //  Q   W   E   R   T   Z   U   I   O
-// 75  74  73  72  71  70  69  68  67
+//  3   4   5   6   7   8   9  10  11
 //
 //    A   S   D   F   G   H   J   K
-//   76  77  78  79  92  93  94  95
+//   12  13  14  15  28  29  30  31
 //
 //  P   Y   X   C   V   B   N   M   L
-// 91  90  89  88  87  86  85  84  83
+// 19  20  21  22  23  24  25  26  27
+#endif
 
 //How the plugboard is mapped
 //[0] is first input port on first mcp23017
@@ -1193,6 +1206,9 @@ uint8_t readSettings(uint8_t preset) {
 #endif
   if (odometer==0xFFFFFFFF || odometer==0xFF3FFFFF){ // default eeprom value = never set/wiped
     odometer=0;
+  }
+  if (serialNumber==0xFFFFFFFF){ //not set, fake it to 0
+        serialNumber=0;
   }
 
   if (getCsum((void*) eeptr, sizeof(settings)- 2) == eesettings.checksum) { // if valid csum, make it active
@@ -2204,7 +2220,6 @@ uint8_t getValidRotors(uint8_t walzeNo, uint8_t *valid,uint8_t *vcnt){
 //   if B was low - down turn
 //  debounce - if less than x ms since last interrupt
 //
-
 
 //#define DEBUGDUP
 //Local helper function

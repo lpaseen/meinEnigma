@@ -1,4 +1,4 @@
-# myEnigma
+# meinEnigma
 
 Here is the source code to an electronic enigma replica described at
 http://meinEnigma.com

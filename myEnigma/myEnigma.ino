@@ -1466,6 +1466,10 @@ void displayWalzes(){
   static uint16_t hourminute;
 #endif
 
+  if (standalone){
+    return;
+  }
+
   for (i=0;i<WALZECNT;i++){
     // **************** RUN ****************
     if (operationMode==run){
@@ -1550,6 +1554,11 @@ uint8_t checkKB() {
   boolean ready;
   uint8_t i,keyflag;
   int8_t key;
+
+
+  if (standalone){
+    return 0;
+  }
 
   if (bitRead(debugMask,DEBUGKBD)==1){
     HT16K33::KEYDATA oldkeys,keys;
@@ -1898,18 +1907,21 @@ void setup() {
     if ((i%2)==0){
       if (!HT.getLed(i,true)){
 	standalone=true;
-	resetLevel=-1;//disable the reset button
+	//	resetLevel=-1;//disable the reset button
       }
     } else {
       if (HT.getLed(i,true)){
 	standalone=true;
-	resetLevel=100;//enable the reset button
+	//	resetLevel=100;//enable the reset button
       }
     }
   }
 
-  if (standalone)
+  if (standalone){
     Serial.println(F("No IC detected,assuming standalone"));
+    plugboardPresent=false;
+    resetLevel=-1;//disable the reset button
+  }
   //  else
   //    Serial.println(F("IC detected assuming not standalone"));
   Serial.println();
@@ -2701,6 +2713,11 @@ void checkPlugboard() {
     {mcp_address+1,1,0},
     {mcp_address+1,1,1}};
 
+
+  if (!plugboardPresent){
+    return;
+  }
+
   //start with a setting of nothing plugged in, A=>A and so on.
   for (i = 0; i < sizeof(plugs); i++) {
     plugs.letter[i]=i;
@@ -2901,8 +2918,8 @@ void rotateWheel(){
   _rotateSingleWheel(i);
 
   //next wheel (one left)
-
   i--;
+
   //Check notch on prev right to see if it's time to move this one
   if (notch){
 #ifdef DEBUGDS
@@ -3185,6 +3202,7 @@ char encrypt(char ch){
 
   odometer++; // one more letter encrypted...
 
+#ifdef PSDEBUG
   //PSDEBUG - final check that shouldn't fail
   if (ch>26 || ch<0){
     Serial.println();
@@ -3192,6 +3210,7 @@ char encrypt(char ch){
     Serial.println(ch,DEC);
     ch=normalize(ch);
   }
+#endif
   return ch+'A';
 }// encrypt
 
@@ -3667,33 +3686,35 @@ void loop() {
   }
 #endif
 
-  //Check if emergency erase is pressed
-  if (analogRead(RESET) < resetLevel){
-    eraseEEPROM();
-    for (i = 0; i < 128; i++) {
-      HT.setLed(i);
-    }
-    HT.sendLed();
-    for (i=0;i<WALZECNT;i++){
-      decimalPoint(i,true);
-    }
-    Serial.println(F("EEPROM settings erased"));
-    Serial.println(F("Now you need to powercycle it to start over"));
-    key=0;
-    while (true){
+  if (!standalone){
+    //Check if emergency erase is pressed
+    if (analogRead(RESET) < resetLevel){
+      eraseEEPROM();
+      for (i = 0; i < 128; i++) {
+	HT.setLed(i);
+      }
+      HT.sendLed();
       for (i=0;i<WALZECNT;i++){
-	if (i==key){
-	  decimalPoint(i,true);
-	}else{
-	  decimalPoint(i,false);
-	}
-      } //for
-      key++;
-      if (key==WALZECNT)
-	key=0;
-      delay(500);
-    } // while true
-  } // If reset
+	decimalPoint(i,true);
+      }
+      Serial.println(F("EEPROM settings erased"));
+      Serial.println(F("Now you need to powercycle it to start over"));
+      key=0;
+      while (true){
+	for (i=0;i<WALZECNT;i++){
+	  if (i==key){
+	    decimalPoint(i,true);
+	  }else{
+	    decimalPoint(i,false);
+	  }
+	} //for
+	key++;
+	if (key==WALZECNT)
+	  key=0;
+	delay(500);
+      } // while true
+    } // If reset
+  }
   /* Check serial input */
   if (stringComplete) {
     //Analyze what we got...
@@ -3775,12 +3796,14 @@ void loop() {
   // Waiting 30ms to be on the safe side
   while ((millis()-ms) <30){
     serialEvent();
-    // and while we wait - check the rotors to have good response there
-    if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) where changed
-      displayWalzes();
-    }
-    if (logLevel>1)
+    if (!standalone){
+      // and while we wait - check the rotors to have good response there
+      if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) where changed
+	displayWalzes();
+      }
+      if (logLevel>1)
       	checkPlugboard();
+    } // if ! standalone
   }
 
   ms=millis();

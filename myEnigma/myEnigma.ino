@@ -7,7 +7,7 @@
  *  know about them (yet).
  *  If it bugs you - fix it and tell me about it, that's the way I learn.
  *
- *  Copyright: Peter Sjoberg <peters-src AT techwiz DOT ca>
+ *  Copyright: Peter Sjoberg <peters-enigma AT techwiz DOT ca>
  *  License: GPLv3
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License version 3 as 
@@ -21,7 +21,7 @@
  *    You should have received a copy of the GNU General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  Status: pre Alpha, still adding functions to the code.
+ *  Status: early beta, not much space left for any more features so concentrate on bug fixing.
  *
  *  History:
  *  v0.00 - test of library, keyboard and LEDs
@@ -75,20 +75,8 @@
  * BUGS:
  *      no code to handle presets except from serial
  *	doublestepping is hardcoded to always enabled
- *	<s>plugboard always physical or none
- *      <s>Can not update plugboard over serial
  *      plugboard enabled even for models that doesn't have a plugboard
  *	pressing more than one key is handled wrong
- *	<s>Shorten the startup, changes so when in "model" mode pressing keys shows info
- *	<s>  like "v" for version, "o" for odometer and so on.
- *	<s?>when pressing multiple keys fast it sometimes doesn't clear all LEDs properly
- *	<s>Running standalone is a problem with the switch on A6 changing all the time
- *		check if standalone, turn on a few leds and see if they are on with getLed
- *	<s>Running without plugboard doesn't show virtual plugboard in printSetting
- *	<s>when setting virtual plugboard on physical config AA is possible
- *	<s>showing of gamma/beta when pressing button is broken
- *	<s>It doesn't clear plugboard when setConfig gets an empty one
- *	<s>no way to change the group size in the output
  *
  *Milestone:
  *
@@ -105,7 +93,7 @@
  * a4,5 i2c
  * a6 - switch
  * a7 - big red button
- *need one more pin for morsecode buzzer/soundboard busy
+ * All pins used!
  *
 */
 
@@ -120,6 +108,8 @@ static const uint16_t EEPROMSIZE=1024;
 #include <avr/pgmspace.h>
 #endif
 
+enum Modes_t {active,inactive,missing,empty}; // status of misc things
+
 //Sound code size:29714-27838=1876
 #define SoundBoard
 #ifdef SoundBoard
@@ -128,7 +118,7 @@ AltSoftSerial altSerial;
 // for Atmega328 based boards AltSoftSerial always uses 
 //   pin 8 receive
 //   pin 9 transmit
-// these pins are hardwired in the chp and can NOT be changed, see http://forum.arduino.cc/index.php?topic=91499.0
+// these pins are hardwired in the chip and can NOT be changed, see http://forum.arduino.cc/index.php?topic=91499.0
 //
 
 //For sound module FN_M16P  AKA DFplayer
@@ -142,14 +132,14 @@ AltSoftSerial altSerial;
 #define dfcmd_GETSTATE 0x42 // get current status
 #define dfcmd_GETFEEDBACK 0x41 // get feedback from module
 uint8_t msgBuf[10]= { 0X7E, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0XEF};
-
+static Modes_t sound_active=active; 
 #endif
 
 //Clock code size:29714-28986=728
 #define CLOCK
 #ifdef CLOCK
 #define DS3231_ADDR 0x68
-static uint8_t clock_active=0;
+static Modes_t clock_active=inactive;
 #endif
 
 /****************/
@@ -236,6 +226,7 @@ volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 ///What mode the modeswitch currently is in and with that what mode to operate in
 ///
 enum operationMode_t {run,plugboard,rotortype,ukw,model,none} operationMode;
+
 ///
 ///Serial input stuff, arduino serial input buffer is 64 bytes
 ///max allowed msg lengh is 250 characters plus some spaces = 300
@@ -840,6 +831,8 @@ void readData() {
 /****************************************************************/
 //write data to soundboard
 //
+//Send "cmd" with the option of "opt"
+//
 void sendCommand(uint8_t cmd, uint16_t opt=0) {
   uint8_t i;
   uint16_t csum;
@@ -878,6 +871,10 @@ void playSong(uint16_t fileno, boolean sync=true) {
   int16_t cnt;
   uint8_t retry;
 
+  if (sound_active!=active){
+    return;
+  }
+
   cnt=0;
   //Make sure it's done playing
   while (digitalRead(BUSY) == LOW && cnt<300){cnt++;delay(10);}
@@ -905,7 +902,6 @@ void playSong(uint16_t fileno, boolean sync=true) {
 #ifdef DEBUG
     Serial.print(", playtime ");
     Serial.print(cnt);
-    
 #endif
   } // if sync
 } // playSong
@@ -1519,9 +1515,9 @@ void displayWalzes(){
       // **************** MODEL ****************
     } else if (operationMode==model) {
 #ifdef CLOCK
-      if (clock_active != 0){
-	if (i==0){
-	  decimalPoint(1,i2c_read(DS3231_ADDR,0) & 1);
+      if (clock_active == active){ // show time
+	if (i==0){ // leftmost digit
+	  decimalPoint(1,i2c_read(DS3231_ADDR,0) & 1); // make it blink at 1sec interval
 	  hourminute=i2c_read2(DS3231_ADDR,1);
 	}
 	if (i==0 && (hourminute>>((3-i)*4) & 0xF)==0){
@@ -1616,6 +1612,52 @@ uint8_t checkKB() {
 } // checkKB
 
 /****************************************************************/
+// Sanity check, if model changed the UKW/Walze/ETW may no longer be valid
+// if not valid, set a default
+
+void sanitizeSettings(){
+  uint8_t i,j;
+
+    // UKW
+    for (i=0;i<sizeof(EnigmaModel.ukw);i++){
+      if (settings.ukw == EnigmaModel.ukw[i])
+	break;
+    }
+
+    if (i==sizeof(EnigmaModel.ukw)){
+      settings.ukw = EnigmaModel.ukw[0];
+    }
+    
+    // WALZE4
+    for (i=0;i<sizeof(EnigmaModel.walze4);i++){
+      if (settings.walze[0] == EnigmaModel.walze4[i])
+	break;
+    }
+    if (i==sizeof(EnigmaModel.walze4)){
+      settings.walze[0] = EnigmaModel.walze4[0];
+    }
+
+    //Make sure no same wheel in two positions
+    // if any one is wrong - reset all 3 wheels
+    if (settings.walze[1]==settings.walze[2] ||
+	settings.walze[1]==settings.walze[3] ||
+	settings.walze[2]==settings.walze[3])
+      for (j=1;j<WALZECNT;j++){
+	settings.walze[j]=EnigmaModel.walze3[j-1];
+      }
+
+    // WALZE3
+    for (j=1;j<WALZECNT;j++){
+      for (i=0;i<sizeof(EnigmaModel.walze3);i++){
+	if (settings.walze[j] == EnigmaModel.walze3[i])
+	  break;
+      }
+      if (i==sizeof(EnigmaModel.walze3) || settings.walze[j] != EnigmaModel.walze3[i])
+	settings.walze[j] = EnigmaModel.walze3[j-1];
+    }
+} // sanitizeSettings
+
+/****************************************************************/
 // Check what position the switch is in 
 // 6 - OFF, no power to mcu
 // 5 - "model" - select what enigma model, leftmost pos
@@ -1675,44 +1717,7 @@ void checkSwitchPos(){
     //Sanity check, if model changed the UKW/Walze/ETW may no longer be valid
     //Check done here since at this point the model is set
     //If done in checkWalze you would lose your config if you go from M4 to M3 and back to M4
-    // UKW
-    for (i=0;i<sizeof(EnigmaModel.ukw);i++){
-      if (settings.ukw == EnigmaModel.ukw[i])
-	break;
-    }
-    //    if (settings.ukw != EnigmaModel.ukw[i]){
-    if (i==sizeof(EnigmaModel.ukw)){
-      settings.ukw = EnigmaModel.ukw[0];
-    }
-    
-    // WALZE4
-    for (i=0;i<sizeof(EnigmaModel.walze4);i++){
-      if (settings.walze[0] == EnigmaModel.walze4[i])
-	break;
-    }
-    if (i==sizeof(EnigmaModel.walze4)){
-      settings.walze[0] = EnigmaModel.walze4[0];
-    }
-
-    //Make sure no same wheel in two positions
-    // if any one is wrong - reset all 3 wheels
-    if (settings.walze[1]==settings.walze[2] ||
-	settings.walze[1]==settings.walze[3] ||
-	settings.walze[2]==settings.walze[3])
-      for (j=1;j<WALZECNT;j++){
-	settings.walze[j]=EnigmaModel.walze3[j-1];
-      }
-
-    // WALZE3
-    for (j=1;j<WALZECNT;j++){
-      for (i=0;i<sizeof(EnigmaModel.walze3);i++){
-	if (settings.walze[j] == EnigmaModel.walze3[i])
-	  break;
-      }
-      if (i==sizeof(EnigmaModel.walze3) || settings.walze[j] != EnigmaModel.walze3[i])
-	settings.walze[j] = EnigmaModel.walze3[j-1];
-    }
-
+    sanitizeSettings();
     settings.etw=EnigmaModel.etw; // each model only have one valid ETW
 
     for (i=0;i<WALZECNT;i++){ // clear all decimalpoints, to be set correctly later and make sure settings is valid
@@ -1772,23 +1777,6 @@ void setup() {
   Serial.println(F("My enigma v0.07"));
   Serial.println();
 
-#ifdef SoundBoard
-  altSerial.begin(9600);
-  sendCommand(dfcmd_RESET,0); // reset unit
-
-  i=0;
-  while (altSerial.available()<10 && i<50){
-    i++;
-    delay(100);
-  }
-  //  Serial.println(i);
-  //  readData(); // read status
-  //PSDEBUG
-  //  Serial.println(F("setting vol 20"));
-  sendCommand(dfcmd_VOLUME,30);
-  //  playSong(1201,false); // "meinEnigma starting up"
-#endif
-
 #ifdef TESTCRYPTO
   Serial.print(F(" Test crypto no "));
   Serial.println(TESTCRYPTO);
@@ -1820,7 +1808,11 @@ void setup() {
 
 #ifdef CLOCK
   uint16_t minute=i2c_read2(DS3231_ADDR,1);
-  Serial.print(F("Time is :"));Serial.println(minute,HEX);
+  if (minute==0xFFFF){
+    clock_active=missing; // no clock
+  }else{
+    Serial.print(F("Time is :"));Serial.println(minute,HEX);
+  }
 #endif
 
 
@@ -1921,7 +1913,34 @@ void setup() {
     Serial.println(F("No IC detected,assuming standalone"));
     plugboardPresent=false;
     resetLevel=-1;//disable the reset button
+#ifdef SoundBoard
+    
+  } else {
+    Serial.println(F("Looking for soundboard"));
+    altSerial.begin(9600);
+    sendCommand(dfcmd_RESET,0); // reset unit
+    
+    i=0;
+    while (altSerial.available()<10 && i<50){
+      i++;
+      delay(100);
+    }
+    //  Serial.println(i);
+    if (altSerial.available()==0){
+      Serial.println(F(" no soundboard found"));
+      sound_active=missing;
+    }else{
+      Serial.println(F(" Found a soundboard, activating it"));
+      //  readData(); // read status
+      //PSDEBUG
+      //  Serial.println(F("setting vol 20"));
+      sendCommand(dfcmd_VOLUME,30);
+      playSong(1201,false); // "meinEnigma starting up"
+      //  Serial.println(F("Done with soundboard"));
+    }
+#endif
   }
+
   //  else
   //    Serial.println(F("IC detected assuming not standalone"));
   Serial.println();
@@ -2564,7 +2583,7 @@ boolean checkWalzes() {
 	  // **************** MODEL ****************
 	} else if (operationMode==model){
 #ifdef CLOCK
-	  if (clock_active!=0){
+	  if (clock_active==active){
 	    hour=i2c_read(DS3231_ADDR,2);
 	    minute=i2c_read(DS3231_ADDR,1);
 	    //	    Serial.print(F("HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.print(minute,HEX);	//PSDEBUG
@@ -2714,7 +2733,7 @@ void checkPlugboard() {
     {mcp_address+1,1,1}};
 
 
-  if (!plugboardPresent){
+  if (plugboardPresent==false){
     return;
   }
 
@@ -3236,12 +3255,13 @@ void parseWheels(String val,int8_t rotor[4]){
       r[3]=r[2];
       r[2]=r[1];
       r[1]=r[0];
-      r[0]='A';
+      r[0]=rotor[0]+'A';
     }
     for (i=0;i<WALZECNT;i++){
       rotor[i]=r[i]-'A';
     }
   }
+  sanitizeSettings(); // make sure the config is valid, and if not make it valid
 } // parseWheels
 
 /****************************************************************/
@@ -3393,6 +3413,7 @@ void parseCommand() {
 	if (i<MODELCNT){ // we had a hit
 	  memcpy_P(&EnigmaModel,&EnigmaModels[i],sizeof(EnigmaModel));
 	  settings.model=checkModel.model;
+	  sanitizeSettings(); // make sure the config is valid, and if not make it valid
 	}else{
 	  printValError(val);
 	  Serial.println(F("Valid models: "));
@@ -3428,6 +3449,7 @@ void parseCommand() {
 
 	if (i<UKWCNT){
 	  settings.ukw=i;
+	  sanitizeSettings(); // make sure the config is valid, and if not make it valid
 	} else {
 	  printValError(val);
 	  Serial.println(F("Valid UKWs: "));
@@ -3472,12 +3494,13 @@ void parseCommand() {
 	    r[3]=r[2];
 	    r[2]=r[1];
 	    r[1]=r[0];
-	    r[0]=0;
+	    r[0]=settings.walze[0];
 	  }
 	  for (i=0;i<WALZECNT;i++){
 	    settings.walze[i]=r[i];
 	  }
 	}
+	sanitizeSettings(); // make sure the config is valid, and if not make it valid
       }
 #ifdef GERMAN
       Serial.print(F("%WALZE: "));
@@ -3501,6 +3524,7 @@ void parseCommand() {
       // PLUGBOARD
       if (val.length()!=0){
 	parsePlugboard((char*)val.c_str());
+	sanitizeSettings(); // make sure the config is valid, and if not make it valid
       }
       Serial.print(F("%PLUGBOARD: "));
       printPlugboard();
@@ -3528,7 +3552,7 @@ void parseCommand() {
       //SAVE
       Serial.print(F("%SAVE"));
       if (val.length()==0){
-	Serial.println(F("ERROR: No position given"));
+	Serial.println(F("ERROR: No preset given"));
       } else {
 	if (val.toInt()>0 && val.toInt()<MAXPRESET){ // preset 0 is reserved
 	  Serial.print(F(" - Save settings as preset "));
@@ -3543,7 +3567,7 @@ void parseCommand() {
       //LOAD
       Serial.print(F("%LOAD"));
       if (val.length()==0){
-	Serial.println(F("ERROR: No position given"));
+	Serial.println(F("ERROR: No preset given"));
       } else {
 	if (val.toInt()>=0 && val.toInt()<MAXPRESET){
 	  if (readSettings(val.toInt())){
@@ -3559,8 +3583,10 @@ void parseCommand() {
 	  printValError(val);
 	}
       }
+      sanitizeSettings(); // make sure the config is valid, and if not make it valid
       //    } else if (cmd==CMD_DUKW){
       //Here config of UKW-D suppose to be
+      //but it's not enough program space for it
 
     } else if (cmd==CMD_LOGLEVEL){
       //LOGLEVEL
@@ -3836,14 +3862,62 @@ void loop() {
   if (HT.keysPressed()==1) { // how many keys are pressed?
     if (key>0 && key<=letterCnt){
       if (operationMode == model){ // possible show some info/test things
+	//C show clock
+	//K turn on/off keyboard and rotor click sound
 	//L turn on all lights
 	//M turn on/off morsecode
-	//V Show version
-	//S Show serial number
 	//O Show odometer
+	//S Show serial number
+	//V Show version
 
 	for (i=0;i<sizeof(prevRamState);i++){prevRamState[i]=HT.displayRam[i];} // Save current state
 	switch (pgm_read_byte(&scancodes[0]+(key)-1)) {
+
+#ifdef CLOCK
+	case 'C': // Show clock
+	  if (clock_active==active){
+	    clock_active=inactive;
+	  }else if (clock_active==inactive){
+	    clock_active=active;
+	  }
+	  if (clock_active==missing){
+	    Serial.println(F("Clock missing"));
+	  }else{
+	    hourminute=i2c_read2(DS3231_ADDR,1);
+	    Serial.print(F("Time is :"));Serial.print(hourminute >>8 & 0xFF,HEX);Serial.print(F(":"));Serial.println(hourminute & 0xFF,HEX);
+	    //PSDEBUG
+	    //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
+	    //	  for (i=0;i<4;i++){
+	    //	    Serial.print(F("DEBUG "));Serial.print(i);Serial.print(":");Serial.print((3-i)*4,DEC);Serial.print(F(">"));Serial.println((hourminute>>((3-i)*4) & 0xF),HEX);
+	    //	  }
+	    /* PSDEBUG
+	       Serial.print(F("DEBUG :"));
+	       for (i=0;i<0x12;i++){
+	       minute=i2c_read(DS3231_ADDR,i);
+	       if (minute<0x10)
+	       Serial.print(F("0"));
+	       Serial.print(minute,HEX);Serial.print(F(":"));
+	       }
+	       Serial.println();
+	    */
+	  }
+	  break;
+#endif
+
+#ifdef SoundBoard
+	case 'K': // turn on/off keyboard click sound
+	  Serial.print(F("sound "));
+	  if (sound_active==active){
+	    Serial.println(F("OFF"));
+	    sound_active=inactive;
+	  } else if (sound_active==inactive){
+	    Serial.println(F("ON"));
+	    sound_active=active;
+	  }else{
+	    Serial.println(F("missing"));
+	  }
+	  break;
+#endif
 	case 'L': // turn on all lights
 	  Serial.println(F("All lighs on"));
 	  for (i = 0; i < 128; i++) {
@@ -3882,11 +3956,11 @@ void loop() {
 	  }
 	  break;
 
-	case 'V': // Show version
-	  displayString("V007",0);
-	  decimalPoint(1,true);
+	case 'O': // Show odometer
+	  ultoa(odometer,strBuffer,10);
+	  displayString("    ",0);
+	  displayString(strBuffer,400);
 	  delay(2000);
-	  decimalPoint(1,false);
 	  break;
 
 	case 'S': // Show serial number
@@ -3896,41 +3970,12 @@ void loop() {
 	  delay(2000);
 	  break;
 
-	case 'O': // Show odometer
-	  ultoa(odometer,strBuffer,10);
-	  displayString("    ",0);
-	  displayString(strBuffer,400);
+	case 'V': // Show version
+	  displayString("V007",0);
+	  decimalPoint(1,true);
 	  delay(2000);
+	  decimalPoint(1,false);
 	  break;
-
-#ifdef CLOCK
-	case 'C': // Show clock
-	  if (clock_active==0){
-	    clock_active=1;
-	  }else{
-	    clock_active=0;
-	  }
-	  hourminute=i2c_read2(DS3231_ADDR,1);
-	  Serial.print(F("Time is :"));Serial.print(hourminute >>8 & 0xFF,HEX);Serial.print(F(":"));Serial.println(hourminute & 0xFF,HEX);
-
-	  //PSDEBUG
-	  //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
-	  //	  for (i=0;i<4;i++){
-	  //	    Serial.print(F("DEBUG "));Serial.print(i);Serial.print(":");Serial.print((3-i)*4,DEC);Serial.print(F(">"));Serial.println((hourminute>>((3-i)*4) & 0xF),HEX);
-	  //	  }
-	  /* PSDEBUG
-	  Serial.print(F("DEBUG :"));
-	  for (i=0;i<0x12;i++){
-	    minute=i2c_read(DS3231_ADDR,i);
-	    if (minute<0x10)
-	      Serial.print(F("0"));
-	    Serial.print(minute,HEX);Serial.print(F(":"));
-	  }
-	  Serial.println();
-	  */
-	  break;
-#endif
-
 	} // switch
 	for (i=0;i<sizeof(prevRamState);i++){HT.displayRam[i]=prevRamState[i];} // Restore current state
 	HT.sendLed();

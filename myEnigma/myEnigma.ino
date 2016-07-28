@@ -219,7 +219,7 @@ volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 #define SwitchPos1 (maxADCval/((SwitchPositions-1)*2))*1  /// "run" - normal running mode, rightmost pos
 #define SwitchPos2 (maxADCval/((SwitchPositions-1)*2))*3  /// Plugboard
 #define SwitchPos3 (maxADCval/((SwitchPositions-1)*2))*5  /// "wheels" - select what wheel is where
-#define SwitchPos4 (maxADCval/((SwitchPositions-1)*2))*7  /// "ukw" and "etw" (where that is an option) - which one and its psition (for the ones that can move)
+#define SwitchPos4 (maxADCval/((SwitchPositions-1)*2))*7  /// "ukw" and "etw" (where that is an option) - which one and its position (for the ones that can move)
 #define SwitchPos5 (maxADCval/((SwitchPositions-1)*2))*9  /// "model" - select what enigma model, leftmost pos
 //6, OFF - leftmost position, powered off
 ///

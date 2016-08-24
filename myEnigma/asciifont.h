@@ -85,7 +85,8 @@ static const uint16_t fontTable[] PROGMEM ={
   0b0000110000000000, // _
   0b0000000000100000, // `
   // a..z - go for ucase version for now
-  /* Save a few bytes by not defining them at all
+#ifdef NOMEMLIMIT
+  // Save a few bytes by not defining them at all
   0b1111001111000000, // A
   0b1111110001010010, // B
   0b1100111100000000, // C
@@ -117,5 +118,5 @@ static const uint16_t fontTable[] PROGMEM ={
   0b0111100000000000, // }  # fix me
   0b0000000000000101, // ~  # fix me
   0b0000000000000000  // <DEL>
-  */
+#endif
 };

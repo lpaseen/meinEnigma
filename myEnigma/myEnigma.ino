@@ -646,7 +646,7 @@ enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;
 boolean standalone=false;	// If standalone (no hardware, just serialAPI)
-int8_t  resetLevel=100; 	// put as variable to be able to disable it if standalone
+int8_t  resetLevel=100; 	// threshold for reset, put as variable to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
 int8_t lastKey; // last key pressed, needed to pass the info between subroutines

@@ -91,8 +91,8 @@
  * d13 - buzzer 
  * a0,1,2,3 - decimal point
  * a4,5 i2c
- * a6 - switch
- * a7 - big red button
+ * a6 - big red button
+ * a7 - switch
  * All pins used!
  *
 */
@@ -200,10 +200,10 @@ volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last chang
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 
 //port that the big red button is on - to reset to factory defaults
-#define RESET 7 ///"BIG RED BUTTON", reset button, actually a7 not d7
+#define RESET 6 ///"BIG RED BUTTON", reset button, actually a6 not d6
 
 ///analog port that the switch is at
-#define Switch 6
+#define Switch 7
 ///How many positions the switch has
 #define SwitchPositions 5
 // 5V/((SwitchPositions/1)*SwitchNo)
@@ -646,7 +646,7 @@ enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;
 boolean standalone=false;	// If standalone (no hardware, just serialAPI)
-int8_t  resetLevel=100; // threashold for reset, put as env to be able to disable it if standalone
+int8_t  resetLevel=100; 	// put as variable to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
 int8_t lastKey; // last key pressed, needed to pass the info between subroutines
@@ -690,7 +690,7 @@ HT16K33 HT;
 //Keyboard scancode table
 //A-Z for keyboard, 0-3 for buttons under walze 0-3
 //(char)pgm_read_byte(&scancodes[0]+key-1)
-#define PROTOTYPE
+//#define PROTOTYPE
 #ifdef PROTOTYPE
 const char scancodes[] PROGMEM = "OIUZTREWQGHJKLMNBVCXYPASDF0123";
 //  9  8  7  6  5  4  3  2  1
@@ -1800,6 +1800,7 @@ void setup() {
   //Check if the big red button is pressed
   if (analogRead(RESET) < resetLevel){
     Serial.println(F(" RESET "));
+
     eraseEEPROM();
   }
   copyEnigmaModel(settings.model);

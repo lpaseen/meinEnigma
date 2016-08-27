@@ -32,6 +32,7 @@
  *  v0.05 - added virtual plugboard, morsecode and almost all functions
  *  v0.06 - added soundboard
  *  v0.07 - added clock
+ *  v0.90 - changed lookup tables to match first PCB version
  *
  *
  * TODO: a lot but some "highlights"...
@@ -91,14 +92,25 @@
  * d13 - buzzer 
  * a0,1,2,3 - decimal point
  * a4,5 i2c
- * a6 - big red button
+ if prototype
+ * a6 - switch
+ * a7 - big red button 
+ else
+ * a6 - big red button 
  * a7 - switch
  * All pins used!
  *
 */
 
+//the prototype has a few things different
+//#define PROTOTYPE
+
 #include "ht16k33.h"
-#include "asciifont.h"
+#ifdef PROTOTYPE
+#include "asciifont-pinout11.h"
+#else
+#include "asciifont-pinout12.h"
+#endif
 #include <EEPROM.h>
 #include <Wire.h>
 #ifdef ESP8266
@@ -200,10 +212,18 @@ volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last chang
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 
 //port that the big red button is on - to reset to factory defaults
+#ifdef PROTOTYPE
+#define RESET 7 ///"BIG RED BUTTON", reset button, actually a7 not d7
+#else
 #define RESET 6 ///"BIG RED BUTTON", reset button, actually a6 not d6
+#endif
 
 ///analog port that the switch is at
+#ifdef PROTOTYPE
+#define Switch 6
+#else
 #define Switch 7
+#endif
 ///How many positions the switch has
 #define SwitchPositions 5
 // 5V/((SwitchPositions/1)*SwitchNo)
@@ -690,7 +710,6 @@ HT16K33 HT;
 //Keyboard scancode table
 //A-Z for keyboard, 0-3 for buttons under walze 0-3
 //(char)pgm_read_byte(&scancodes[0]+key-1)
-//#define PROTOTYPE
 #ifdef PROTOTYPE
 const char scancodes[] PROGMEM = "OIUZTREWQGHJKLMNBVCXYPASDF0123";
 //  9  8  7  6  5  4  3  2  1
@@ -728,10 +747,8 @@ const byte led[] PROGMEM = {12, 24, 22, 14,  5, 15, 28, 29, 10, 30, 31, 27, 26, 
 //[0] is first input port on first mcp23017
 // (char)pgm_read_byte(&steckerbrett[0]+key-1)
 //with steckerbrett as A-Z the plugboard ends up as
-// YVSPMJGDA
-//  WTQNKHEB
-// ZXUROLIFC
-// or
+//
+#ifdef PROTOTYPE
 //  Q   W   E   R   T   Z   U   I   O
 // 24  21  18  15  12  09  06  03  00
 //
@@ -740,15 +757,27 @@ const byte led[] PROGMEM = {12, 24, 22, 14,  5, 15, 28, 29, 10, 30, 31, 27, 26, 
 //
 //  P   Y   X   C   V   B   N   M   L
 // 25  23  20  17  14  11  08  05  02
-//
 //                                   00000000001111111111222222
 //                                   01234567890123456789012345
-const byte steckerbrett[] PROGMEM = "OKLIJMUHNZGBTFVRDCESXWAYQP"; // 
+const byte steckerbrett[] PROGMEM = "OKLIJMUHNZGBTFVRDCESXWAYQP"; //
+#else
+//  Q   W   E   R   T   Z   U   I   O
+// 00  01  02  03  04  05  06  07  08
+//
+//    A   S   D   F   G   H   J   K
+//   09  10  11  12  13  14  15  16
+//
+//  P   Y   X   C   V   B   N   M   L
+// 17  18  19  20  21  22  23  24  25
+//                                   00000000001111111111222222
+//                                   01234567890123456789012345
+const byte steckerbrett[] PROGMEM = "QWERTZUIOASDFGHJKPYXCVBNML"; //
+#endif
 //
 
 //Decimal points are handled outside the ht16k33 (not enough wires).
 //they are wired to analog io pins on the arduino and then some hardware that is in between will light up the correct leds decimal point at the right moment
-static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need to use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 is switch, a7 is big red button.)
+static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need to use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 & a7 are is switch and is big red button.)
 
 /****************************************************************/
 ///
@@ -1473,7 +1502,8 @@ void displayWalzes(){
 	displayLetter(' ',i);
       } else {
 	ch=settings.currentWalze[i];
-	while (ch>=letterCnt){ch-=letterCnt;}
+	//	while (ch>=letterCnt){ch-=letterCnt;}
+	ch=normalize(ch);
 	displayLetter(getWalzeChar(&WALZE[0],ch),i);
 	if (settings.currentWalze[i]==settings.ringstellung[i]){
 	  decimalPoint(i,true);
@@ -1774,7 +1804,7 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.println(F("My enigma v0.07"));
+  Serial.println(F("My enigma v0.90"));
   Serial.println();
 
 #ifdef TESTCRYPTO
@@ -2341,12 +2371,20 @@ boolean checkWalzes() {
 	case B00:
 	case B11: // if current is 11 prev can't be 11 also
 	  break;
+#ifdef PROTOTYPE
 	case B10:
+#else
+	case B01:
+#endif
 	  changed = true;
 	  direction = up;
 	  break;
 	  
+#ifdef PROTOTYPE
 	case B01:
+#else
+	case B10:
+#endif
 	  changed = true;
 	  direction = down;
 	  break;
@@ -3972,7 +4010,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version
-	  displayString("V007",0);
+	  displayString("V090",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);
@@ -3988,6 +4026,8 @@ void loop() {
 	  Serial.println(ledOn);
 	}
 	HT.setLedNow(ledOn);
+	if (settings.morseCode)
+	  sendLetter((byte)pgm_read_byte(&scancodes[0]+key-1));
 	delay(11);
       } else {
 	checkPlugboard();

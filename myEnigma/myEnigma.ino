@@ -74,6 +74,7 @@
  *
  *
  * BUGS:
+ *      <s?>for virtual plugboard - need an empty so settings can be cleared also
  *      no code to handle presets except from serial
  *	doublestepping is hardcoded to always enabled
  *      plugboard enabled even for models that doesn't have a plugboard
@@ -2441,7 +2442,7 @@ boolean checkWalzes() {
 		    }//PSDEBUG
 		  }//if larger
 		}//for pb
-		for (i=x;i<13;i++){ // clear the restr of the pairs
+		for (i=x;i<13;i++){ // clear the rest of the pairs
 		  pbpairs[i][0]=' ';
 		  pbpairs[i][1]=' ';
 		}
@@ -2467,13 +2468,15 @@ boolean checkWalzes() {
 		}
 	      } // if direction
 	    } else if (walzeNo==2 || walzeNo==3){
-	      //BUG: - should accept keys also
+	      //BUG: - should accept keys also, but the keys are handled elsewhere
 	      //BUG:? - should flash the letters on the lampboard as they are active
 
 	      x=0; //charge the emergency break
 	      if (direction==up){
 		do {
-		  if ( pbpairs[pbpos][walzeNo-2]==' ' || pbpairs[pbpos][walzeNo-2] == 'A'){
+		  if ( pbpairs[pbpos][walzeNo-2] == 'A'){
+		    pbpairs[pbpos][walzeNo-2]=' ';
+		  }else if ( pbpairs[pbpos][walzeNo-2] == ' '){
 		    pbpairs[pbpos][walzeNo-2]='Z';
 		  }else{
 		    pbpairs[pbpos][walzeNo-2]--;
@@ -2485,7 +2488,9 @@ boolean checkWalzes() {
 	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
 	      }else{
 		do {
-		  if ( pbpairs[pbpos][walzeNo-2]==' ' || pbpairs[pbpos][walzeNo-2] == 'Z'){
+		  if ( pbpairs[pbpos][walzeNo-2] == 'Z'){
+		    pbpairs[pbpos][walzeNo-2]=' ';
+		  }else if ( pbpairs[pbpos][walzeNo-2] == ' '){
 		    pbpairs[pbpos][walzeNo-2]='A';
 		  }else{
 		    pbpairs[pbpos][walzeNo-2]++;

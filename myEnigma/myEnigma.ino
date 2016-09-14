@@ -103,6 +103,11 @@
  *
 */
 
+//Also change "how version CODE_VERSION "
+//value is version * 100 so v1.23=123
+#define CODE_VERSION 90
+
+
 //the prototype has a few things different
 //#define PROTOTYPE
 
@@ -1043,7 +1048,10 @@ void printSettings(){
   uint8_t i;
 
   Serial.print(F("fwVersion: "));
-  Serial.println(settings.fwVersion, HEX);
+  //  Serial.println(settings.fwVersion, HEX);
+  Serial.print(CODE_VERSION/100,DEC);
+  Serial.print(F("."));
+  Serial.println(int(CODE_VERSION%100),DEC);
   Serial.print(F("preset: "));
   Serial.println(lastPreset,DEC);
   Serial.println();
@@ -1805,8 +1813,10 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.println(F("My enigma v0.90"));
-  Serial.println();
+  Serial.print(F("My enigma v"));
+  Serial.print(CODE_VERSION/100,DEC);
+  Serial.print(F("."));
+  Serial.println(int(CODE_VERSION%100),DEC);
 
 #ifdef TESTCRYPTO
   Serial.print(F(" Test crypto no "));
@@ -4014,7 +4024,7 @@ void loop() {
 	  delay(2000);
 	  break;
 
-	case 'V': // Show version
+	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
 	  displayString("V090",0);
 	  decimalPoint(1,true);
 	  delay(2000);

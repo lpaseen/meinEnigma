@@ -2389,6 +2389,7 @@ boolean checkWalzes() {
 #endif
 	  changed = true;
 	  direction = up;
+	  playSong(1200,false); // rotor click
 	  break;
 	  
 #ifdef PROTOTYPE
@@ -2398,6 +2399,7 @@ boolean checkWalzes() {
 #endif
 	  changed = true;
 	  direction = down;
+	  playSong(1202,false); // rotor click
 	  break;
 	} // switch
       } // if current state is bottom of the click 

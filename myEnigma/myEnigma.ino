@@ -212,7 +212,7 @@ uint8_t timeBase; //ms to base all numbers on
 
 #define WALZECNT 4
 //if count is something else than 4 the pin this definitions (and several other things) also need to change
-static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {2, 3, 4, 5, 6, 7, 10,11};
+static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {3, 2, 4, 5, 6, 7, 10,11};
 volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last change happened
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};

@@ -33,6 +33,7 @@
  *  v0.06 - added soundboard
  *  v0.07 - added clock
  *  v0.90 - changed lookup tables to match first PCB version
+ *  v0.91 - fixed one rotor pinout being wrong way
  *
  *
  * TODO: a lot but some "highlights"...
@@ -103,9 +104,9 @@
  *
 */
 
-//Also change "how version CODE_VERSION "
+//Also search for "how version CODE_VERSION " and change that ("V")
 //value is version * 100 so v1.23=123
-#define CODE_VERSION 90
+#define CODE_VERSION 91
 
 
 //the prototype has a few things different
@@ -660,6 +661,7 @@ typedef struct {
   int8_t    currentWalze[WALZECNT]; /// current position of the wheel, 0-sizeof(walze[0]) not the letters!
   uint8_t   grpsize;            /// Size of groups to print out over serial
   boolean   morseCode;		/// Send morsecode or not
+  boolean   sound;              /// say letters encoded
   unsigned int checksum;
 } machineSettings_t;
 unsigned long odometer;      /// How many characters this unit has en/decrypted
@@ -1783,6 +1785,7 @@ void loadDefaults(){
   settings.plugboardMode=physicalpb;
   settings.grpsize  = 5; // size of groups printed over serial
   settings.morseCode=false;// Don't send morsecode by default
+  settings.sound=true;     // Do speak out the letters
   saveSettings(0);
 }//loadDefaults
 
@@ -3924,6 +3927,7 @@ void loop() {
 	//M turn on/off morsecode
 	//O Show odometer
 	//S Show serial number
+        //T turn on/off TTS - text to speach
 	//V Show version
 
 	for (i=0;i<sizeof(prevRamState);i++){prevRamState[i]=HT.displayRam[i];} // Save current state
@@ -3973,6 +3977,17 @@ void loop() {
 	    Serial.println(F("missing"));
 	  }
 	  break;
+       case 'T': // turn on/off voice out
+          Serial.print(F("TTS "));
+          if (settings.sound){
+            Serial.println(F("OFF"));
+            settings.sound=false;
+          } else {
+            Serial.println(F("ON"));
+            settings.sound=true;
+          }
+          break;
+
 #endif
 	case 'L': // turn on all lights
 	  Serial.println(F("All lighs on"));
@@ -4027,7 +4042,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V090",0);
+	  displayString("V091",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);
@@ -4043,8 +4058,12 @@ void loop() {
 	  Serial.println(ledOn);
 	}
 	HT.setLedNow(ledOn);
-	if (settings.morseCode)
+        if (settings.morseCode)
 	  sendLetter((byte)pgm_read_byte(&scancodes[0]+key-1));
+#ifdef SoundBoard
+        if (settings.sound==active)
+           playSong(1500+(byte)pgm_read_byte(&scancodes[0]+key-1)-'A',false); // A=1500, B=1501...
+#endif
 	delay(11);
       } else {
 	checkPlugboard();
@@ -4094,6 +4113,8 @@ void loop() {
 	  playSong(1006,false);
 	  break;
 	}
+        if (settings.sound)
+           playSong(1500+(byte)ench-'A',false); // A=1500, B=1501...
 #endif
 	Serial.print(ench);
 	ledOn=pgm_read_byte(led+ench-'A');

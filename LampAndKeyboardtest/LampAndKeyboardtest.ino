@@ -69,6 +69,7 @@ void loop() {
   static int8_t dir = 1;
   int8_t key;
   static int16_t lastKeyCode = 0;
+  uint8_t keyCnt;
 
   key = HT.readKey();
   if (key != 0) {
@@ -78,8 +79,11 @@ void loop() {
       } else {
         lastKeyCode = pgm_read_byte(&scancodes[0] + key - 1);
       }
-
-      Serial.print(F("Key # "));
+      keyCnt=HT.keysPressed();
+      if (keyCnt<10)
+        Serial.print(F(" "));
+      Serial.print(keyCnt,DEC);
+      Serial.print(F(": Key # "));
       Serial.print(key);
       Serial.print(F(" = "));
       Serial.print((char)lastKeyCode);

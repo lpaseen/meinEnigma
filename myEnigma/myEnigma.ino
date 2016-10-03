@@ -34,6 +34,7 @@
  *  v0.07 - added clock
  *  v0.90 - changed lookup tables to match first PCB version
  *  v0.91 - fixed one rotor pinout being wrong way
+ *  v0.92 - added more sound
  *
  *
  * TODO: a lot but some "highlights"...
@@ -106,7 +107,7 @@
 
 //Also search for "how version CODE_VERSION " and change that ("V")
 //value is version * 100 so v1.23=123
-#define CODE_VERSION 91
+#define CODE_VERSION 92
 
 
 //the prototype has a few things different
@@ -785,7 +786,7 @@ const byte steckerbrett[] PROGMEM = "QWERTZUIOASDFGHJKPYXCVBNML"; //
 
 //Decimal points are handled outside the ht16k33 (not enough wires).
 //they are wired to analog io pins on the arduino and then some hardware that is in between will light up the correct leds decimal point at the right moment
-static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need to use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 & a7 are is switch and is big red button.)
+static const uint8_t dp[] PROGMEM = {14,15,16,17}; // need to use analog port a0,a1,a2,a3 for output (a4 & 5 are i2c, a6 & a7 are switch and is big red button.)
 
 /****************************************************************/
 ///
@@ -904,7 +905,7 @@ void sendCommand(uint8_t cmd, uint16_t opt=0) {
 /****************************************************************/
 //write data to soundboard
 //
-void playSong(uint16_t fileno, boolean sync=true) {
+void playSound(uint16_t fileno, boolean sync=true) {
   int16_t cnt;
   uint8_t retry;
 
@@ -941,7 +942,7 @@ void playSong(uint16_t fileno, boolean sync=true) {
     Serial.print(cnt);
 #endif
   } // if sync
-} // playSong
+} // playSound
 
 #endif
 //endif SoundBoard
@@ -1205,10 +1206,11 @@ void saveSettings(uint8_t preset) {
   EEPROM.write((int)(EEPROMSIZE-5),(uint8_t)(odometer     & 0xFF));
   EEPROM.commit();
 #else
-  eeprom_write_byte((uint8_t*)(EEPROM.length()-8),(uint8_t)(odometer>>24 & 0xFF));
-  eeprom_write_byte((uint8_t*)(EEPROM.length()-7),(uint8_t)(odometer>>16 & 0xFF));
-  eeprom_write_byte((uint8_t*)(EEPROM.length()-6),(uint8_t)(odometer>>8  & 0xFF));
-  eeprom_write_byte((uint8_t*)(EEPROM.length()-5),(uint8_t)(odometer     & 0xFF));
+  eeprom_write_dword((uint32_t*)(EEPROM.length()-8),(uint32_t)odometer);
+  //  eeprom_write_byte((uint8_t*)(EEPROM.length()-8),(uint8_t)(odometer>>24 & 0xFF));
+  //  eeprom_write_byte((uint8_t*)(EEPROM.length()-7),(uint8_t)(odometer>>16 & 0xFF));
+  //  eeprom_write_byte((uint8_t*)(EEPROM.length()-6),(uint8_t)(odometer>>8  & 0xFF));
+  //  eeprom_write_byte((uint8_t*)(EEPROM.length()-5),(uint8_t)(odometer     & 0xFF));
 #endif
 
 } // saveSettings
@@ -1232,13 +1234,15 @@ uint8_t readSettings(uint8_t preset) {
 #ifdef ESP8266
   serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-1));
 #else
-  serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
+  //  serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
+  serialNumber=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-4));
 #endif    
   //odometer is stored in the end of the eeprom instead of inside the structure.
 #ifdef ESP8266
     odometer=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE)-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-5));
 #else
-  odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
+//  odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
+odometer=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-8));
 #endif
   if (odometer==0xFFFFFFFF || odometer==0xFF3FFFFF){ // default eeprom value = never set/wiped
     odometer=0;
@@ -1499,6 +1503,9 @@ void displayWalzes(){
   uint8_t i;
   char ch;
 #ifdef CLOCK
+#ifdef SoundBoard
+  static uint16_t oldhourminute;
+#endif
   static uint16_t hourminute;
 #endif
 
@@ -1559,8 +1566,19 @@ void displayWalzes(){
       if (clock_active == active){ // show time
 	if (i==0){ // leftmost digit
 	  decimalPoint(1,i2c_read(DS3231_ADDR,0) & 1); // make it blink at 1sec interval
+#ifdef SoundBoard
+	  oldhourminute=hourminute;
+#endif
 	  hourminute=i2c_read2(DS3231_ADDR,1);
-	}
+#ifdef SoundBoard
+	  if ((hourminute&0xf00)==0){ // we are at full hour
+	    if (oldhourminute!=hourminute){ // and we just got there
+	      playSound(bcd2dec(hourminute>>8),true);
+	      playSound(2016,false);
+	    } //if first after change
+	  } // if full hour
+#endif
+	}// if leftmost digit
 	if (i==0 && (hourminute>>((3-i)*4) & 0xF)==0){
 	    displayLetter(' ',i);
 	  }else{
@@ -1719,6 +1737,9 @@ void checkSwitchPos(){
   operationMode_t newMode;
   const __FlashStringHelper  *newModeTxt;
   boolean allGood;
+#ifdef SoundBoard
+  uint16_t sound2play;
+#endif
 
   if (standalone){ // if standalone pretend it's always in run mode
     if (operationMode!=run)
@@ -1733,21 +1754,39 @@ void checkSwitchPos(){
   if (adcval<SwitchPos1){
     newMode=run;
     newModeTxt=F("run");
+#ifdef SoundBoard
+    sound2play=2013; // "run"
+#endif
   } else if (adcval<SwitchPos2){
     newMode=plugboard;
     newModeTxt=F("plugboard");
+#ifdef SoundBoard
+    sound2play=2012; // "plugboard"
+#endif
   } else if (adcval<SwitchPos3){
     newMode=rotortype;
     newModeTxt=F("rotortype");
+#ifdef SoundBoard
+    sound2play=2011; // "rotor"
+#endif
   } else if (adcval<SwitchPos4){
     newMode=ukw;
     newModeTxt=F("ukw");
+#ifdef SoundBoard
+    sound2play=2010; // "reflector"
+#endif
   } else {
     newMode=model;
     newModeTxt=F("model");
+#ifdef SoundBoard
+    sound2play=2005; // "model"
+#endif
   }
 
   if (operationMode!=newMode){ // someone moved the switch to a new mode
+#ifdef SoundBoard
+    playSound(sound2play,false);
+#endif
     if (logLevel>3){
       Serial.print(adcval);
       Serial.print(F(": "));
@@ -1761,7 +1800,7 @@ void checkSwitchPos(){
     sanitizeSettings();
     settings.etw=EnigmaModel.etw; // each model only have one valid ETW
 
-    for (i=0;i<WALZECNT;i++){ // clear all decimalpoints, to be set correctly later and make sure settings is valid
+    for (i=0;i<WALZECNT;i++){ // clear all decimalpoints, to be set according to settings later and make sure settings is valid
       decimalPoint(i,false);
       if (settings.ringstellung[i] < 0 || settings.ringstellung[i] >= letterCnt) settings.ringstellung[i]=0;
       if (settings.currentWalze[i] < 0 || settings.currentWalze[i] >= letterCnt) settings.currentWalze[i]=0;
@@ -1844,8 +1883,13 @@ void setup() {
   //Check if the big red button is pressed
   if (analogRead(RESET) < resetLevel){
     Serial.println(F(" RESET "));
-
     eraseEEPROM();
+#ifdef SoundBoard
+    playSound(2200,true); // "All keys and settings are now erased, please poweroff."
+#endif
+    while (analogRead(RESET) < resetLevel){
+      ;//waiting for button to be released
+    }
   }
   copyEnigmaModel(settings.model);
 
@@ -1907,6 +1951,9 @@ void setup() {
 
   if (analogRead(RESET) < resetLevel){
       Serial.println(F("EEPROM settings erased"));
+#ifdef SoundBoard
+      playSound(2200,true); // "All keys and settings are now erased, please poweroff."
+#endif
       while (analogRead(RESET) < resetLevel){}
     } else {
       delay(500);
@@ -1980,7 +2027,8 @@ void setup() {
       //PSDEBUG
       //  Serial.println(F("setting vol 20"));
       sendCommand(dfcmd_VOLUME,30);
-      playSong(1201,false); // "meinEnigma starting up"
+      playSound(2000,true); // "meinEnigma"
+      playSound(2004,false); // "initializing"
       //  Serial.println(F("Done with soundboard"));
     }
 #endif
@@ -2392,7 +2440,9 @@ boolean checkWalzes() {
 #endif
 	  changed = true;
 	  direction = up;
-	  playSong(1200,false); // rotor click
+#ifdef SoundBoard
+	  playSound(1201,false); // rotor click 1
+#endif
 	  break;
 	  
 #ifdef PROTOTYPE
@@ -2402,7 +2452,9 @@ boolean checkWalzes() {
 #endif
 	  changed = true;
 	  direction = down;
-	  playSong(1202,false); // rotor click
+#ifdef SoundBoard
+	  playSound(1202,false); // rotor click 2
+#endif
 	  break;
 	} // switch
       } // if current state is bottom of the click 
@@ -3981,9 +4033,13 @@ void loop() {
           Serial.print(F("TTS "));
           if (settings.sound){
             Serial.println(F("OFF"));
+	    playSound(2022,true); // tts
+	    playSound(2024,false); // off
             settings.sound=false;
           } else {
             Serial.println(F("ON"));
+	    playSound(2022,true); // tts
+	    playSound(2023,false); // on
             settings.sound=true;
           }
           break;
@@ -4042,7 +4098,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V091",0);
+	  displayString("V092",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);
@@ -4061,8 +4117,8 @@ void loop() {
         if (settings.morseCode)
 	  sendLetter((byte)pgm_read_byte(&scancodes[0]+key-1));
 #ifdef SoundBoard
-        if (settings.sound==active)
-           playSong(1500+(byte)pgm_read_byte(&scancodes[0]+key-1)-'A',false); // A=1500, B=1501...
+        if (settings.sound==true)
+           playSound(1501+(byte)pgm_read_byte(&scancodes[0]+key-1)-'A',false); // A=1501, B=1502...
 #endif
 	delay(11);
       } else {
@@ -4072,49 +4128,49 @@ void loop() {
 #ifdef SoundBoard
 	//should probably assign different part of they keyboard to different sound
 	//for example left keys on bottom row has 1001, right keys has 1002 and so on
-	//	playSong(random(1001,1007),false);
+	//	playSound(random(1001,1007),false);
 	switch (pgm_read_byte(&scancodes[0]+key-1)) {
 	case 'Q':
 	case 'W':
 	case 'E':
 	case 'R':
 	case 'T':
-	  playSong(1001,false);
+	  playSound(1001,false);
 	  break;
 	case 'A':
 	case 'S':
 	case 'D':
 	case 'F':
-	  playSong(1002,false);
+	  playSound(1002,false);
 	  break;
 	case 'P':
 	case 'Y':
 	case 'X':
 	case 'C':
-	  playSong(1003,false);
+	  playSound(1003,false);
 	  break;
 	case 'Z':
 	case 'U':
 	case 'I':
 	case 'O':
-	  playSong(1004,false);
+	  playSound(1004,false);
 	  break;
 	case 'G':
 	case 'H':
 	case 'J':
 	case 'K':
-	  playSong(1005,false);
+	  playSound(1005,false);
 	  break;
 	case 'V':
 	case 'B':
 	case 'N':
 	case 'M':
 	case 'L':
-	  playSong(1006,false);
+	  playSound(1006,false);
 	  break;
 	}
         if (settings.sound)
-           playSong(1500+(byte)ench-'A',false); // A=1500, B=1501...
+           playSound(1501+(byte)ench-'A',false); // A=1501, B=1502...
 #endif
 	Serial.print(ench);
 	ledOn=pgm_read_byte(led+ench-'A');

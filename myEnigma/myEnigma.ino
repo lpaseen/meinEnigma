@@ -1234,15 +1234,19 @@ uint8_t readSettings(uint8_t preset) {
 #ifdef ESP8266
   serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-1));
 #else
-  //  serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
   serialNumber=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-4));
+  if (serialNumber >200000000){ //PSDEBUG
+    serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
+  }
 #endif    
   //odometer is stored in the end of the eeprom instead of inside the structure.
 #ifdef ESP8266
-    odometer=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE)-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-5));
+  odometer=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE)-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-5));
 #else
-//  odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
 odometer=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-8));
+if (odometer>100000){ //PSDEBUG
+   odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
+ }
 #endif
   if (odometer==0xFFFFFFFF || odometer==0xFF3FFFFF){ // default eeprom value = never set/wiped
     odometer=0;
@@ -1884,12 +1888,6 @@ void setup() {
   if (analogRead(RESET) < resetLevel){
     Serial.println(F(" RESET "));
     eraseEEPROM();
-#ifdef SoundBoard
-    playSound(2200,true); // "All keys and settings are now erased, please poweroff."
-#endif
-    while (analogRead(RESET) < resetLevel){
-      ;//waiting for button to be released
-    }
   }
   copyEnigmaModel(settings.model);
 
@@ -1914,8 +1912,8 @@ void setup() {
     i2c_write2(mcp_address,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
     i2c_write2(mcp_address,IODIRA,0xff); // Set all ports to inputs
     i2c_write2(mcp_address,IODIRB,0xff); // Set all ports to inputs
-    i2c_write2(mcp_address,GPPUA,0xff); // enable pullup, seems to sometimes be false readings otherwise and guessing to slow on pullup
-    i2c_write2(mcp_address,GPPUB,0xff); //
+    i2c_write2(mcp_address,GPPUA,0xff);  // enable pullup, seems to sometimes be false readings otherwise and guessing to slow on pullup
+    i2c_write2(mcp_address,GPPUB,0xff);  //
 
     //The other chip
     i2c_write2(mcp_address+1,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
@@ -1923,8 +1921,8 @@ void setup() {
     i2c_write2(mcp_address+1,IODIRB,0xff); // Set all ports to inputs
     //  i2c_write2(mcp_address+1,GPPUA,0); // disable pullup (for now,to save power)
     //  i2c_write2(mcp_address+1,GPPUB,0); //
-    i2c_write2(mcp_address+1,GPPUA,0xff); // enable pullup, seems to sometimes be a problem otherwise
-    i2c_write2(mcp_address+1,GPPUB,0xff); //
+    i2c_write2(mcp_address+1,GPPUA,0xff);  // enable pullup, seems to sometimes be a problem otherwise
+    i2c_write2(mcp_address+1,GPPUB,0xff);  //
     plugboardPresent=true;
   }else{
     Serial.println(F("No plugboard found"));
@@ -1949,16 +1947,60 @@ void setup() {
     decimalPoint(i,true);
   }
 
+  if (standalone){
+    Serial.println(F("No IC detected,assuming standalone"));
+    plugboardPresent=false;
+    resetLevel=-1;//disable the reset button
+#ifdef SoundBoard
+    
+  } else {
+    Serial.println(F("Looking for soundboard"));
+    altSerial.begin(9600);
+    sendCommand(dfcmd_RESET,0); // reset unit
+    
+    i=0;
+    while (altSerial.available()<10 && i<50){
+      i++;
+      delay(100);
+    }
+    //  Serial.println(i);
+    if (altSerial.available()==0){
+      Serial.println(F(" no soundboard found"));
+      sound_active=missing;
+    }else{
+      Serial.println(F(" Found a soundboard, activating it"));
+      //  readData(); // read status
+      //PSDEBUG
+      //  Serial.println(F("setting vol 20"));
+      sendCommand(dfcmd_VOLUME,30);
+      //  Serial.println(F("Done with soundboard"));
+    }
+#endif
+  }
+
+  //  else
+  //    Serial.println(F("IC detected assuming not standalone"));
+  Serial.println();
+
   if (analogRead(RESET) < resetLevel){
       Serial.println(F("EEPROM settings erased"));
 #ifdef SoundBoard
-      playSound(2200,true); // "All keys and settings are now erased, please poweroff."
+      playSound(2000,true); // "meinEnigma"
+      playSound(2014,true); // "ready"
+//can't be played here, dunno why      playSound(2200,true); // "All keys and settings are now erased, please poweroff."
 #endif
       while (analogRead(RESET) < resetLevel){}
     } else {
       delay(500);
     }
 
+#ifdef SoundBoard
+  playSound(2000,true); // "meinEnigma"
+  //  playSound(2002,false); // "starting up"
+  playSound(2004,false); // "initializing"
+#endif
+
+      
   Serial.println(F("All LEDs OFF"));
   for (i=0;i<sizeof(HT.displayRam);i++)
     HT.displayRam[i]=0;
@@ -2000,43 +2042,6 @@ void setup() {
       }
     }
   }
-
-  if (standalone){
-    Serial.println(F("No IC detected,assuming standalone"));
-    plugboardPresent=false;
-    resetLevel=-1;//disable the reset button
-#ifdef SoundBoard
-    
-  } else {
-    Serial.println(F("Looking for soundboard"));
-    altSerial.begin(9600);
-    sendCommand(dfcmd_RESET,0); // reset unit
-    
-    i=0;
-    while (altSerial.available()<10 && i<50){
-      i++;
-      delay(100);
-    }
-    //  Serial.println(i);
-    if (altSerial.available()==0){
-      Serial.println(F(" no soundboard found"));
-      sound_active=missing;
-    }else{
-      Serial.println(F(" Found a soundboard, activating it"));
-      //  readData(); // read status
-      //PSDEBUG
-      //  Serial.println(F("setting vol 20"));
-      sendCommand(dfcmd_VOLUME,30);
-      playSound(2000,true); // "meinEnigma"
-      playSound(2004,false); // "initializing"
-      //  Serial.println(F("Done with soundboard"));
-    }
-#endif
-  }
-
-  //  else
-  //    Serial.println(F("IC detected assuming not standalone"));
-  Serial.println();
 
   if (!standalone){delay(500);}
 
@@ -3827,6 +3832,9 @@ void loop() {
     //Check if emergency erase is pressed
     if (analogRead(RESET) < resetLevel){
       eraseEEPROM();
+#ifdef SoundBoard
+      playSound(2200,false); // "All keys and settings are now erased, please poweroff."
+#endif
       for (i = 0; i < 128; i++) {
 	HT.setLed(i);
       }

@@ -112,7 +112,7 @@
 
 //the prototype has a few things different
 //#define PROTOTYPE
-
+//ht16k33 comes from https://github.com/lpaseen/ht16k33
 #include "ht16k33.h"
 #ifdef PROTOTYPE
 #include "asciifont-pinout11.h"
@@ -130,9 +130,10 @@ static const uint16_t EEPROMSIZE=1024;
 
 enum Modes_t {active,inactive,missing,empty}; // status of misc things
 
-//Sound code size:29714-27838=1876
+//Sound code size:27642-25358=2284
 #define SoundBoard
 #ifdef SoundBoard
+//AltSoftSerial comes from https://github.com/PaulStoffregen/AltSoftSerial
 #include <AltSoftSerial.h>
 AltSoftSerial altSerial;
 // for Atmega328 based boards AltSoftSerial always uses 
@@ -1235,18 +1236,12 @@ uint8_t readSettings(uint8_t preset) {
   serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-1));
 #else
   serialNumber=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-4));
-  if (serialNumber >200000000){ //PSDEBUG
-    serialNumber=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-4))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-3))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-2))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-1));
-  }
 #endif    
   //odometer is stored in the end of the eeprom instead of inside the structure.
 #ifdef ESP8266
   odometer=(long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE)-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROMSIZE-5));
 #else
-odometer=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-8));
-if (odometer>100000){ //PSDEBUG
-   odometer=(long)eeprom_read_byte((uint8_t*)(EEPROM.length()-8))<<24 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-7))<<16 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-6))<<8 | (long)eeprom_read_byte((uint8_t*)(EEPROM.length()-5));
- }
+  odometer=(long)eeprom_read_dword((uint32_t*)(EEPROM.length()-8));
 #endif
   if (odometer==0xFFFFFFFF || odometer==0xFF3FFFFF){ // default eeprom value = never set/wiped
     odometer=0;
@@ -1930,29 +1925,53 @@ void setup() {
     settings.plugboardMode=virtualpb;
   }
 
-  HT.begin(0x00);
+  HT.begin(0x00); // This also clears all leds
 
   // Prep decimal point
   for (i=0;i<WALZECNT;i++){
     pinMode(pgm_read_byte(dp+i), OUTPUT);
   }
  
-  // Test the screen
-  Serial.println(F("All LEDs on"));
-  for (i=0;i<sizeof(HT.displayRam);i++)
-    HT.displayRam[i]=0xff;
+  //Check if standalone
+  //real lights are only 0-31 and 64-127 so lets test turning on some lights in 32-63 range
+  //if they stick we probably have a ht16k33 chip there and with that the rest of the enigma
+  //if not it is probably standalone and we need to "disable" things like the switch
+  //or it will fill the serial port with switch changes, and other things or it will be slow.
+  for (i=34;i<63;i++){
+    if ((i%2)==0)
+      HT.setLed(i);
+    else
+      HT.clearLed(i);
+  }
+  delay(100);
   HT.sendLed();
-  // including all decimal points
-  for (i=0;i<WALZECNT;i++){
-    decimalPoint(i,true);
+
+  //Clear the ram to make sure we read data but don't send it!
+  for (i=0;i<sizeof(HT.displayRam);i++)
+    HT.displayRam[i]=0;
+  
+  standalone=false;//start with assuming it's not standalone
+  for (i=34;i<63;i++){//Verify that they are set correctly, if not assume standalone
+    if ((i%2)==0){
+      if (!HT.getLed(i,true)){
+	standalone=true;
+	break;
+      }
+    } else {
+      if (HT.getLed(i,true)){
+	standalone=true;
+	break;
+      }
+    }
   }
 
+  
   if (standalone){
     Serial.println(F("No IC detected,assuming standalone"));
     plugboardPresent=false;
-    resetLevel=-1;//disable the reset button
+    resetLevel=-1;//disable the reset button    
 #ifdef SoundBoard
-    
+    sound_active=missing; //assume no soundboard
   } else {
     Serial.println(F("Looking for soundboard"));
     altSerial.begin(9600);
@@ -1978,10 +1997,19 @@ void setup() {
 #endif
   }
 
-  //  else
-  //    Serial.println(F("IC detected assuming not standalone"));
   Serial.println();
-
+  if (!standalone){
+    // Test the screen
+    Serial.println(F("All LEDs on"));
+    for (i=0;i<sizeof(HT.displayRam);i++)
+      HT.displayRam[i]=0xff;
+    HT.sendLed();
+    // including all decimal points
+    for (i=0;i<WALZECNT;i++){
+      decimalPoint(i,true);
+    }
+  }
+  
   if (analogRead(RESET) < resetLevel){
       Serial.println(F("EEPROM settings erased"));
 #ifdef SoundBoard
@@ -1989,61 +2017,30 @@ void setup() {
       playSound(2014,true); // "ready"
 //can't be played here, dunno why      playSound(2200,true); // "All keys and settings are now erased, please poweroff."
 #endif
-      while (analogRead(RESET) < resetLevel){}
-    } else {
+      while (analogRead(RESET) < resetLevel){} // wait for button to be released.
+  } else {
+    if (!standalone){
       delay(500);
     }
+  }
 
 #ifdef SoundBoard
   playSound(2000,true); // "meinEnigma"
   //  playSound(2002,false); // "starting up"
   playSound(2004,false); // "initializing"
 #endif
-
-      
-  Serial.println(F("All LEDs OFF"));
-  for (i=0;i<sizeof(HT.displayRam);i++)
-    HT.displayRam[i]=0;
-  HT.sendLed();
-  for (i=0;i<WALZECNT;i++){
-    decimalPoint(i,false);
-  }
-
-  //real lights are only 0-31 and 64-127 so lets test turning on some lights in 32-63 range
-  //if they stick we probably have a ht16k33 chip there and with that the rest of the enigma
-  //if not it is probably standalone and we need to "disable" the switch
-  //or it will fill the serial port with switch changes
-  for (i=34;i<63;i++){
-    if ((i%2)==0)
-      HT.setLed(i);
-    else
-      HT.clearLed(i);
-  }
-  HT.sendLed();
-
-  standalone=false;
-  for (i=0;i<sizeof(HT.displayRam);i++)
-    HT.displayRam[i]=0;
-
-  for (i = 0; i < 128; i++) { // clear the array
-    HT.clearLed(i);
-  }
-
-  for (i=34;i<63;i++){//Verify that they are set correctly, if not assume standalone
-    if ((i%2)==0){
-      if (!HT.getLed(i,true)){
-	standalone=true;
-	//	resetLevel=-1;//disable the reset button
-      }
-    } else {
-      if (HT.getLed(i,true)){
-	standalone=true;
-	//	resetLevel=100;//enable the reset button
-      }
+     
+  if (!standalone){  
+    Serial.println(F("All LEDs OFF"));
+    HT.clearAll();
+    //    for (i=0;i<sizeof(HT.displayRam);i++)
+    //      HT.displayRam[i]=0;
+    //    HT.sendLed();
+    for (i=0;i<WALZECNT;i++){
+      decimalPoint(i,false);
     }
+    delay(500);
   }
-
-  if (!standalone){delay(500);}
 
 #ifdef ESP8266
   EEPROM.begin(EEPROMSIZE);
@@ -2066,6 +2063,7 @@ void setup() {
   }
 #endif
   
+  //Check if key is pressed to load a preset
   key=checkKB();
   if (key>0){
     i=pgm_read_byte(&scancodes[0]+(key)-1);

@@ -1287,7 +1287,7 @@ void updateEncoderState() {
       // check time since last change to ignore bounces.
       // Test shown that turning fast at 1ms can still be correct while 6ms can still be bounce/wrong
       // going with >5ms since on the original Enigma you couldn't physically spin it to fast.
-      if ((millis()-encoderChange[i / 2]) > 5){ 
+      if ((millis()-encoderChange[i / 2]) > 20){ 
         encoderState[i / 2] = (encoderState[i / 2] << 2) | state;
         encoderMoved[i / 2] = true;
 	encoderChange[i / 2]=millis();
@@ -2442,7 +2442,7 @@ boolean checkWalzes() {
 	case B01:
 #endif
 	  changed = true;
-	  direction = up;
+	  direction = down;
 #ifdef SoundBoard
 	  playSound(1201,false); // rotor click 1
 #endif
@@ -2454,7 +2454,7 @@ boolean checkWalzes() {
 	case B10:
 #endif
 	  changed = true;
-	  direction = down;
+	  direction = up;
 #ifdef SoundBoard
 	  playSound(1202,false); // rotor click 2
 #endif

@@ -109,9 +109,25 @@
 //value is version * 100 so v1.23=123
 #define CODE_VERSION 92
 
-
 //the prototype has a few things different
 //#define PROTOTYPE
+
+//Select plugboard order, keyboard or numeric
+//on M4 the plugboard is organized in numeric order
+#define NUMERICPB 
+
+//Include code for the sound board size:27716-25380=2336
+#define SoundBoard
+
+//Include code for the RTC size:27716-26784=932
+#define CLOCK
+
+
+//If running on some future version with way more memory
+//but a lot of this code is not tested
+//#define NOMEMLIMIT
+
+
 //ht16k33 comes from https://github.com/lpaseen/ht16k33
 #include "ht16k33.h"
 #ifdef PROTOTYPE
@@ -130,8 +146,9 @@ static const uint16_t EEPROMSIZE=1024;
 
 enum Modes_t {active,inactive,missing,empty}; // status of misc things
 
-//Sound code size:27642-25358=2284
-#define SoundBoard
+//function prototype
+//void checkPlugboard();
+
 #ifdef SoundBoard
 //AltSoftSerial comes from https://github.com/PaulStoffregen/AltSoftSerial
 #include <AltSoftSerial.h>
@@ -156,8 +173,6 @@ uint8_t msgBuf[10]= { 0X7E, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0XEF};
 static Modes_t sound_active=active; 
 #endif
 
-//Clock code size:29714-28986=728
-#define CLOCK
 #ifdef CLOCK
 #define DS3231_ADDR 0x68
 static Modes_t clock_active=inactive;
@@ -246,7 +261,7 @@ volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
 
 #define maxADCval 1023
 #define SwitchPos1 (maxADCval/((SwitchPositions-1)*2))*1  /// "run" - normal running mode, rightmost pos
-#define SwitchPos2 (maxADCval/((SwitchPositions-1)*2))*3  /// Plugboard
+#define SwitchPos2 (maxADCval/((SwitchPositions-1)*2))*3  /// "Plugboard"
 #define SwitchPos3 (maxADCval/((SwitchPositions-1)*2))*5  /// "wheels" - select what wheel is where
 #define SwitchPos4 (maxADCval/((SwitchPositions-1)*2))*7  /// "ukw" and "etw" (where that is an option) - which one and its position (for the ones that can move)
 #define SwitchPos5 (maxADCval/((SwitchPositions-1)*2))*9  /// "model" - select what enigma model, leftmost pos
@@ -499,7 +514,8 @@ typedef enum {
 typedef enum {
   virtualpb,
   physicalpb,
-  config
+  config,
+  nopb
 } vpb_t;
 ///
 /// a list of valid enigma models
@@ -548,7 +564,8 @@ const enigmaModels_t EnigmaModelI =
   .sname="EnigmaI",
   .lname="German Army and Air Force (Wehrmacht, Luftwaffe)",
   .etw={0},
-  .walze3={1,2,3,4,5},
+  .walze3={WALZE_I,WALZE_II,WALZE_III,WALZE_IV,WALZE_V,WALZE_VI,WALZE_VII,WALZE_VIII},
+  .walze4={WALZE_Beta,WALZE_Gamma},
   .ukwType=fixed,
   .ukw={2,3,4},
   .doublestep=true
@@ -558,6 +575,7 @@ const enigmaModels_t EnigmaModelI =
 
 //Define how many models we have here
 // info comes from http://www.cryptomuseum.com/crypto/enigma/wiring.htm
+// and source of http://summersidemakerspace.ca/projects/enigma-machine/
 #define MODELCNT (sizeof(EnigmaModels)/sizeof(EnigmaModels[0]))
 const enigmaModels_t EnigmaModels[] PROGMEM = {
   {
@@ -607,7 +625,7 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
     fixed,
     {UKWN,NA,NA,NA},
     true,
-    true // not sure if they had a plugboard or not
+    true
   },
   {
     SwissK,
@@ -674,9 +692,9 @@ unsigned long serialNumber;  /// static number stored in eeprom and set with oth
 machineSettings_t settings; // current settings and also what is saved in eeprome
 enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
-boolean plugboardEmpty=false;
-boolean standalone=false;	// If standalone (no hardware, just serialAPI)
-int8_t  resetLevel=100; 	// threshold for reset, put as variable to be able to disable it if standalone
+boolean plugboardEmpty=false;    // whatever anything is plugged in anywhere
+boolean standalone=false;	 // If standalone (no hardware, just serialAPI)
+int8_t  resetLevel=100; 	 // threshold for reset, put as variable to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
 int8_t lastKey; // last key pressed, needed to pass the info between subroutines
@@ -769,7 +787,11 @@ const byte led[] PROGMEM = {12, 24, 22, 14,  5, 15, 28, 29, 10, 30, 31, 27, 26, 
 // 25  23  20  17  14  11  08  05  02
 //                                   00000000001111111111222222
 //                                   01234567890123456789012345
+#ifdef NUMERICPB
+const byte steckerbrett[] PROGMEM = "IQZHPYGOXFNWEMVDLUCKTBJSAR"; //
+#else
 const byte steckerbrett[] PROGMEM = "OKLIJMUHNZGBTFVRDCESXWAYQP"; //
+#endif
 #else
 //  Q   W   E   R   T   Z   U   I   O
 // 00  01  02  03  04  05  06  07  08
@@ -781,7 +803,11 @@ const byte steckerbrett[] PROGMEM = "OKLIJMUHNZGBTFVRDCESXWAYQP"; //
 // 17  18  19  20  21  22  23  24  25
 //                                   00000000001111111111222222
 //                                   01234567890123456789012345
+#ifdef NUMERICPB
+const byte steckerbrett[] PROGMEM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; //
+#else
 const byte steckerbrett[] PROGMEM = "QWERTZUIOASDFGHJKPYXCVBNML"; //
+#endif
 #endif
 //
 
@@ -1101,12 +1127,16 @@ void printSettings(){
   }else if (settings.plugboardMode==physicalpb){
     Serial.print(F("physical"));
     checkPlugboard();
+  }else if (settings.plugboardMode==nopb){
+    Serial.print(F("Not available"));
   } else {
     Serial.print(F("config"));
   }
   Serial.print(F(" - "));
   if (settings.plugboardMode==physicalpb && plugboardEmpty){
     Serial.print(F("empty"));
+  }else if (settings.plugboardMode==nopb){
+    Serial.print(F("none"));
   }else{
     printPlugboard();
   }
@@ -1499,11 +1529,11 @@ void displayString(char msg[], uint16_t sleep) {
 void displayWalzes(){
   static const char phys[] PROGMEM ="PHYS";
   static const char virt[] PROGMEM ="VIRT";
-  uint8_t i;
+  uint8_t i,hour;
   char ch;
 #ifdef CLOCK
 #ifdef SoundBoard
-  static uint16_t oldhourminute;
+  uint16_t oldhourminute;
 #endif
   static uint16_t hourminute;
 #endif
@@ -1535,6 +1565,8 @@ void displayWalzes(){
 	displayLetter((char)pgm_read_byte(&virt[0]+i),i);
       }else if (settings.plugboardMode==physicalpb){
 	displayLetter((char)pgm_read_byte(&phys[0]+i),i);
+      }else if (settings.plugboardMode==nopb){
+	displayLetter((char)'-',i);
       } else { //only config left, the value to show is handled in checkWalze
 	displayLetter(currentWalzePos[i],i);
       }
@@ -1570,9 +1602,15 @@ void displayWalzes(){
 #endif
 	  hourminute=i2c_read2(DS3231_ADDR,1);
 #ifdef SoundBoard
-	  if ((hourminute&0xf00)==0){ // we are at full hour
+	  if ( (hourminute & 0xff)==0 ){ // we are at full hour
 	    if (oldhourminute!=hourminute){ // and we just got there
-	      playSound(bcd2dec(hourminute>>8),true);
+	      hour=bcd2dec(hourminute>>8);//figure out what hour it is
+	      if (hour >20){
+		playSound(20,true);
+		playSound(hour-20,true);
+	      }else{
+		playSound(hour,true);
+	      }
 	      playSound(2016,false);
 	    } //if first after change
 	  } // if full hour
@@ -2394,6 +2432,7 @@ boolean p_checkDups(uint8_t pairs[13][2]){
 }// p_checkDups
 
 /****************/
+// check if a walze(rotor) was changed and if so act upon it
 boolean checkWalzes() {
   uint8_t walzeNo,currentRotor,validCnt,prev,i,j,x;
   boolean changed;
@@ -2489,11 +2528,11 @@ boolean checkWalzes() {
 	    if (settings.plugboardMode==virtualpb){
 	      settings.plugboardMode=physicalpb;
 	      //Clearing of the plugboard values will be done next time it's checked
-	    }else{
+	    }else if (settings.plugboardMode==physicalpb) {
 	      settings.plugboardMode=virtualpb;
-	    }// if virtualpb;else
+	    }// left is config and NA
 	  }// if walzeNo==0
-	  if (settings.plugboardMode!=physicalpb ){
+	  if (settings.plugboardMode!=physicalpb && settings.plugboardMode!=nopb){
 	    if (walzeNo==1){
 	      if (settings.plugboardMode==virtualpb){
 		//first round, lets transfer current setting to the pairs
@@ -2505,11 +2544,11 @@ boolean checkWalzes() {
 		    x++;
 #ifdef DEBUGDUP
 		    Serial.print(x-1);Serial.print(F(" "));Serial.print(pbpairs[x-1][0],DEC);Serial.print(F(" "));Serial.println(pbpairs[x-1][1],DEC);//PSDEBUG
-#endif
-		    if (x>12){
-		      //		      Serial.print(F("PSDEBUG: - error, to many pairs!!!"));
+		    if (x>12){ //should never get here
+		      Serial.print(F("PSDEBUG: - error, to many pairs!!!"));
 		      break;
 		    }//PSDEBUG
+#endif
 		  }//if larger
 		}//for pb
 		for (i=x;i<13;i++){ // clear the rest of the pairs
@@ -2707,13 +2746,13 @@ boolean checkWalzes() {
 
 	    //hour range
 	    if (walzeNo==0){
-	      if (direction==up){
+	      if (direction==down){
 		if (hour<20){
 		  hour+=10;
 		}else{
 		  hour = hour%10;
 		}
-	      } else { // going down
+	      } else { // going up
 		if (hour<10){
 		  hour=23;
 		}else{
@@ -2721,28 +2760,29 @@ boolean checkWalzes() {
 		}
 	      }
 	    } else if (walzeNo==1){
-	      if (direction==up){
+	      if (direction==down){
 		if (hour%10 == 9){
 		  hour-=9;
 		}else{
 		  hour++;
 		}
-	      } else { // going down
+	      } else { // going up
 		if (hour%10 == 0){
 		  hour+=9;
 		}else{
 		  hour--;
 		}
 	      }
-	      //Minute range
+
+	    //Minute range
 	    } else if (walzeNo==2){
-	      if (direction==up){
+	      if (direction==down){
 		if (minute<50){
 		  minute+=10;
 		}else{
 		  minute = minute%10;
 		}
-	      } else { // going down
+	      } else { // going up
 		if (minute<10 ){
 		  minute+=50;
 		}else{
@@ -2750,13 +2790,13 @@ boolean checkWalzes() {
 		}
 	      }
 	    } else if (walzeNo==3){
-	      if (direction==up){
+	      if (direction==down){
 		if ((minute %10) == 9){
 		  minute-=9;
 		}else{
 		  minute++;
 		}
-	      } else { // going down
+	      } else { // going up
 		if ((minute%10) == 0){
 		  minute+=9;
 		}else{
@@ -2796,13 +2836,12 @@ boolean checkWalzes() {
 #ifdef CLOCK
          }
 #endif
-
 	  //BUG: Need to handle presets here
 	} // if op=model
       } // if direction != none
     } // if encoderMoved[] is true
   } // for i in walzecnt
-  if (changed) 
+  if (changed)
     displayWalzes();
   return changed;
 } // checkWalzes
@@ -2847,7 +2886,7 @@ void checkPlugboard() {
     {mcp_address+1,1,1}};
 
 
-  if (plugboardPresent==false){
+  if (plugboardPresent==false || settings.plugboardMode==nopb){
     return;
   }
 
@@ -4002,7 +4041,14 @@ void loop() {
 	    Serial.println(F("Clock missing"));
 	  }else{
 	    hourminute=i2c_read2(DS3231_ADDR,1);
-	    Serial.print(F("Time is :"));Serial.print(hourminute >>8 & 0xFF,HEX);Serial.print(F(":"));Serial.println(hourminute & 0xFF,HEX);
+	    Serial.print(F("Time is :"));
+	    Serial.print(hourminute >>8 & 0xFF,HEX);
+	    if ((hourminute & 0xFF)<0x10){
+	      Serial.print(F(":0"));
+	    }else{
+	      Serial.print(F(":"));
+	    }
+	    Serial.println(hourminute & 0xFF,HEX);
 	    //PSDEBUG
 	    //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
 	    //	  for (i=0;i<4;i++){
@@ -4027,10 +4073,14 @@ void loop() {
 	  Serial.print(F("sound "));
 	  if (sound_active==active){
 	    Serial.println(F("OFF"));
+	    playSound(2020,true); // sound
+	    playSound(2024,false); // off
 	    sound_active=inactive;
 	  } else if (sound_active==inactive){
 	    Serial.println(F("ON"));
 	    sound_active=active;
+	    playSound(2020,true); // sound
+	    playSound(2023,false); // on
 	  }else{
 	    Serial.println(F("missing"));
 	  }
@@ -4044,9 +4094,9 @@ void loop() {
             settings.sound=false;
           } else {
             Serial.println(F("ON"));
+            settings.sound=true;
 	    playSound(2022,true); // tts
 	    playSound(2023,false); // on
-            settings.sound=true;
           }
           break;
 
@@ -4131,6 +4181,8 @@ void loop() {
 	checkPlugboard();
 	rotateWheel();
 	ench=encrypt(pgm_read_byte(&scancodes[0]+key-1));
+	Serial.print(ench);
+	ledOn=pgm_read_byte(led+ench-'A');
 #ifdef SoundBoard
 	//should probably assign different part of they keyboard to different sound
 	//for example left keys on bottom row has 1001, right keys has 1002 and so on
@@ -4178,8 +4230,6 @@ void loop() {
         if (settings.sound)
            playSound(1501+(byte)ench-'A',false); // A=1501, B=1502...
 #endif
-	Serial.print(ench);
-	ledOn=pgm_read_byte(led+ench-'A');
 	if (logLevel>1){
 	  Serial.print(F("  turning on LED: "));
 	  Serial.println(ledOn);

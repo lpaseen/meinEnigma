@@ -681,7 +681,7 @@ typedef struct {
   int8_t    currentWalze[WALZECNT]; /// current position of the wheel, 0-sizeof(walze[0]) not the letters!
   uint8_t   grpsize;            /// Size of groups to print out over serial
   boolean   morseCode;		/// Send morsecode or not
-  boolean   sound;              /// say letters encoded
+  boolean   tts;                /// say letters encoded
   unsigned int checksum;
 } machineSettings_t;
 unsigned long odometer;      /// How many characters this unit has en/decrypted
@@ -931,8 +931,8 @@ void sendCommand(uint8_t cmd, uint16_t opt=0) {
 
 /****************************************************************/
 //write data to soundboard
-//
-void playSound(uint16_t fileno, boolean sync=true) {
+// to abort any currently playing sound, set wait=false
+void playSound(uint16_t fileno, boolean wait=true) {
   int16_t cnt;
   uint8_t retry;
 
@@ -940,9 +940,14 @@ void playSound(uint16_t fileno, boolean sync=true) {
     return;
   }
 
-  cnt=0;
-  //Make sure it's done playing
-  while (digitalRead(BUSY) == LOW && cnt<300){cnt++;delay(10);}
+  if (wait){  //Should we make sure it's done playing
+    //it's just small snippets so it shouldn't take to long
+    cnt=0;
+    while (digitalRead(BUSY) == LOW && cnt<300){
+      cnt++;
+      delay(10);
+    }
+  }
 
   retry=3;
   do {
@@ -954,21 +959,11 @@ void playSound(uint16_t fileno, boolean sync=true) {
     while (digitalRead(BUSY) == HIGH && cnt<100){cnt++;delay(1);}
     retry--;
   } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
-
-  if (sync){
-    //Wait for it to finish playing
-    //it's just small snippets so it shouldn't take to long
-    cnt=0;
-    while (digitalRead(BUSY) == LOW && cnt<300){
-      cnt++;
-      delay(10);
-    };
-    
+  
 #ifdef DEBUG
-    Serial.print(", playtime ");
-    Serial.print(cnt);
+  Serial.print(", playtime ");
+  Serial.print(cnt);
 #endif
-  } // if sync
 } // playSound
 
 #endif
@@ -1606,14 +1601,14 @@ void displayWalzes(){
 	    if (oldhourminute!=hourminute){ // and we just got there
 	      hour=bcd2dec(hourminute>>8);//figure out what hour it is
 	      if (hour ==0){
-		playSound(101,false); // "zero"
+		playSound(101); // "zero"
 	      }else if (hour >20){
-		playSound(20,false);
-		playSound(hour-20,false);
+		playSound(20);
+		playSound(hour-20);
 	      }else{
-		playSound(hour,false);
+		playSound(hour);
 	      }
-	      playSound(2016,false); // "a clock"
+	      playSound(2016); // "a clock"
 	    } //if first after change
 	  } // if full hour
 #endif
@@ -1824,7 +1819,7 @@ void checkSwitchPos(){
 
   if (operationMode!=newMode){ // someone moved the switch to a new mode
 #ifdef SoundBoard
-    playSound(sound2play,false);
+    playSound(sound2play,false); //play it now, aborting any currently playing sound
 #endif
     if (logLevel>3){
       Serial.print(adcval);
@@ -1863,7 +1858,7 @@ void loadDefaults(){
   settings.plugboardMode=physicalpb;
   settings.grpsize  = 5; // size of groups printed over serial
   settings.morseCode=false;// Don't send morsecode by default
-  settings.sound=true;     // Do speak out the letters
+  settings.tts=true;     // Do speak out the letters
   saveSettings(0);
 }//loadDefaults
 
@@ -2053,9 +2048,9 @@ void setup() {
   if (analogRead(RESET) < resetLevel){
       Serial.println(F("EEPROM settings erased"));
 #ifdef SoundBoard
-      playSound(2000,true); // "meinEnigma"
-      playSound(2014,true); // "ready"
-//can't be played here, dunno why      playSound(2200,true); // "All keys and settings are now erased, please poweroff."
+      playSound(2000); // "meinEnigma"
+      playSound(2014); // "ready"
+//can't be played here, looses power, dunno why      playSound(2200); // "All keys and settings are now erased, please poweroff."
 #endif
       while (analogRead(RESET) < resetLevel){} // wait for button to be released.
   } else {
@@ -2065,9 +2060,9 @@ void setup() {
   }
 
 #ifdef SoundBoard
-  playSound(2000,true); // "meinEnigma"
-  //  playSound(2002,false); // "starting up"
-  playSound(2004,false); // "initializing"
+  playSound(2000); // "meinEnigma"
+  playSound(2002); // "starting up"
+  //playSound(2004); // "initializing"
 #endif
      
   if (!standalone){  
@@ -2485,7 +2480,7 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = down;
 #ifdef SoundBoard
-	  playSound(1201,false); // rotor click 1
+	  playSound(1201); // rotor click 1
 #endif
 	  break;
 	  
@@ -2497,7 +2492,7 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = up;
 #ifdef SoundBoard
-	  playSound(1202,false); // rotor click 2
+	  playSound(1202); // rotor click 2
 #endif
 	  break;
 	} // switch
@@ -3845,6 +3840,9 @@ void loop() {
   int16_t freeNow;
   static unsigned long ms=0;
   char strBuffer[11];
+#ifdef SoundBoard
+  uint16_t sound2play;
+#endif
   HT16K33::DisplayRam_t prevRamState;
 
 #ifdef CLOCK
@@ -3872,7 +3870,7 @@ void loop() {
     if (analogRead(RESET) < resetLevel){
       eraseEEPROM();
 #ifdef SoundBoard
-      playSound(2200,false); // "All keys and settings are now erased, please poweroff."
+      playSound(2200); // "All keys and settings are now erased, please poweroff."
 #endif
       for (i = 0; i < 128; i++) {
 	HT.setLed(i);
@@ -4075,30 +4073,30 @@ void loop() {
 	  Serial.print(F("sound "));
 	  if (sound_active==active){
 	    Serial.println(F("OFF"));
-	    playSound(2020,true); // sound
-	    playSound(2024,false); // off
+	    playSound(2020,false); // sound
+	    playSound(2024); // off
 	    sound_active=inactive;
 	  } else if (sound_active==inactive){
 	    Serial.println(F("ON"));
 	    sound_active=active;
-	    playSound(2020,true); // sound
-	    playSound(2023,false); // on
+	    playSound(2020,false); // sound
+	    playSound(2023); // on
 	  }else{
 	    Serial.println(F("missing"));
 	  }
 	  break;
        case 'T': // turn on/off voice out
           Serial.print(F("TTS "));
-          if (settings.sound){
+          if (settings.tts){
             Serial.println(F("OFF"));
-	    playSound(2022,true); // tts
-	    playSound(2024,false); // off
-            settings.sound=false;
+	    playSound(2022,false); // tts
+	    playSound(2024); // off
+            settings.tts=false;
           } else {
             Serial.println(F("ON"));
-            settings.sound=true;
-	    playSound(2022,true); // tts
-	    playSound(2023,false); // on
+            settings.tts=true;
+	    playSound(2022,false); // tts
+	    playSound(2023); // on
           }
           break;
 
@@ -4175,8 +4173,8 @@ void loop() {
         if (settings.morseCode)
 	  sendLetter((byte)pgm_read_byte(&scancodes[0]+key-1));
 #ifdef SoundBoard
-        if (settings.sound==true)
-           playSound(1501+(byte)pgm_read_byte(&scancodes[0]+key-1)-'A',false); // A=1501, B=1502...
+        if (settings.tts==true)
+	  playSound(1501+(byte)pgm_read_byte(&scancodes[0]+key-1)-'A',false); // A=1501, B=1502...
 #endif
 	delay(11);
       } else {
@@ -4188,49 +4186,52 @@ void loop() {
 #ifdef SoundBoard
 	//should probably assign different part of they keyboard to different sound
 	//for example left keys on bottom row has 1001, right keys has 1002 and so on
-	//	playSound(random(1001,1007),false);
+	//	playSound(random(1001,1007));
 	switch (pgm_read_byte(&scancodes[0]+key-1)) {
 	case 'Q':
 	case 'W':
 	case 'E':
 	case 'R':
 	case 'T':
-	  playSound(1001,false);
+	  sound2play=1001;
 	  break;
 	case 'A':
 	case 'S':
 	case 'D':
 	case 'F':
-	  playSound(1002,false);
+	  sound2play=1002;
 	  break;
 	case 'P':
 	case 'Y':
 	case 'X':
 	case 'C':
-	  playSound(1003,false);
+	  sound2play=1003;
 	  break;
 	case 'Z':
 	case 'U':
 	case 'I':
 	case 'O':
-	  playSound(1004,false);
+	  sound2play=1004;
 	  break;
 	case 'G':
 	case 'H':
 	case 'J':
 	case 'K':
-	  playSound(1005,false);
+	  sound2play=1005;
 	  break;
 	case 'V':
 	case 'B':
 	case 'N':
 	case 'M':
 	case 'L':
-	  playSound(1006,false);
+	  sound2play=1006;
 	  break;
 	}
-        if (settings.sound)
-           playSound(1501+(byte)ench-'A',false); // A=1501, B=1502...
+	if (sound_active==active){
+	  playSound(sound2play);
+	}
+        if (settings.tts)
+           playSound(1501+(byte)ench-'A'); // A=1501, B=1502...
 #endif
 	if (logLevel>1){
 	  Serial.print(F("  turning on LED: "));

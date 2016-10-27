@@ -1605,11 +1605,13 @@ void displayWalzes(){
 	  if ( (hourminute & 0xff)==0 && sound_active==active){ // we are at full hour and sound is not disabled
 	    if (oldhourminute!=hourminute){ // and we just got there
 	      hour=bcd2dec(hourminute>>8);//figure out what hour it is
-	      if (hour >20){
-		playSound(20,true);
-		playSound(hour-20,true);
+	      if (hour ==0){
+		playSound(101,false); // "zero"
+	      }else if (hour >20){
+		playSound(20,false);
+		playSound(hour-20,false);
 	      }else{
-		playSound(hour,true);
+		playSound(hour,false);
 	      }
 	      playSound(2016,false); // "a clock"
 	    } //if first after change

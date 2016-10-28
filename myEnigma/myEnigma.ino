@@ -454,9 +454,17 @@ const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!STAR
 #endif
 #else
 #ifdef GERMAN
+#ifdef CLOCK
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!TIME!";
+#else
 const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!";
+#endif
+#else
+#ifdef CLOCK
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!TIME!";
 #else
 const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!";
+#endif
 #endif
 #endif
 static const uint8_t CMD_SETTINGS=0;
@@ -470,9 +478,10 @@ static const uint8_t CMD_GROUPSIZE=7;
 static const uint8_t CMD_SAVE=8;
 static const uint8_t CMD_LOAD=9;
 static const uint8_t CMD_LOGLEVEL=10;
-static const uint8_t CMD_DEBUG=11;
-static const uint8_t CMD_VERBOSE=12;
-static const uint8_t CMD_DUKW=13; // config UKW-D, similar to plugboard
+static const uint8_t CMD_TIME=11;
+static const uint8_t CMD_DEBUG=12;
+static const uint8_t CMD_VERBOSE=13;
+static const uint8_t CMD_DUKW=14; // config UKW-D, similar to plugboard
 
 //Log level on serial port
 //0 = all off, only message
@@ -1068,6 +1077,26 @@ void printPlugboard(){
   }
 } // printPlugboard
 
+#ifdef CLOCK
+/****************************************************************/
+void printTime(){
+  uint8_t hour,minute,second;
+
+  hour=i2c_read(DS3231_ADDR,2);
+  minute=i2c_read(DS3231_ADDR,1);
+  second=i2c_read(DS3231_ADDR,0);
+  if (hour<0x10){Serial.print(F("0"));}
+  Serial.print(hour,HEX);
+  Serial.print(F(":"));
+  if (minute<0x10){Serial.print(F("0"));}
+  Serial.print(minute,HEX);
+  Serial.print(F(":"));
+  if (second<0x10){Serial.print(F("0"));}
+  Serial.print(second,HEX);
+
+} // printTime
+#endif
+
 /****************************************************************/
 void printSettings(){
   uint8_t i;
@@ -1140,6 +1169,12 @@ void printSettings(){
   Serial.print(F("currentWalze: "));
   printWheel(&settings.currentWalze[0]);
   Serial.println();
+
+  if (clock_active!=missing){
+    Serial.print(F("Time is :"));
+    printTime();
+    Serial.println();
+  }
 
 } // printSettings
 
@@ -1448,6 +1483,10 @@ void setConfig(enigmaModel_t model,
 #ifdef CLOCK
 uint8_t bcd2dec(uint8_t bcd){
   return ((bcd/16 * 10) + (bcd % 16));
+} //bcd2dec
+
+uint8_t dec2bcd(uint8_t dec){
+  return ((dec/10 * 16) + (dec % 10));
 } //bcd2dec
 #endif
 
@@ -1928,7 +1967,9 @@ void setup() {
   if (minute==0xFFFF){
     clock_active=missing; // no clock
   }else{
-    Serial.print(F("Time is :"));Serial.println(minute,HEX);
+    Serial.print(F("Time is :"));
+    printTime();
+    Serial.println();
   }
 #endif
 
@@ -2733,13 +2774,11 @@ boolean checkWalzes() {
 	  // **************** MODEL ****************
 	} else if (operationMode==model){
 #ifdef CLOCK
-	  if (clock_active==active){
-	    hour=i2c_read(DS3231_ADDR,2);
-	    minute=i2c_read(DS3231_ADDR,1);
-	    //	    Serial.print(F("HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.print(minute,HEX);	//PSDEBUG
-	    hour=((hour>>4)*10 + (hour & 0xf));//bcd 2 dec
-	    minute=((minute>>4)*10 + (minute & 0xf)); //bcd 2 dec
-	    //	    Serial.print(F("   -  decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.println(minute,DEC);  //PSDEBUG
+	  // To change time one of the four buttons under the rotors need to be pressed also, this is to prevent accidental
+	  // change of time by sneezing on a rotor
+	  if (clock_active==active && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')){
+	    hour=bcd2dec(i2c_read(DS3231_ADDR,2));
+	    minute=bcd2dec(i2c_read(DS3231_ADDR,1));
 
 	    //hour range
 	    if (walzeNo==0){
@@ -2807,8 +2846,8 @@ boolean checkWalzes() {
 	      minute=59;
 
 	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC);  //PSDEBUG
-	    hour=(hour/10*16)+(hour%10); // dec 2 bcd
-	    minute=(minute/10*16)+(minute%10); // dec 2 bcd
+	    hour=dec2bcd(hour);
+	    minute=dec2bcd(minute);
 	    //	    Serial.print(F(" - HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.println(minute,HEX);Serial.println(); //PSDEBUG
 	    i2c_write2(DS3231_ADDR,2,hour);
 	    i2c_write2(DS3231_ADDR,1,minute);
@@ -2831,7 +2870,7 @@ boolean checkWalzes() {
 	      copyEnigmaModel(settings.model);
             } // if walze=0
 #ifdef CLOCK
-         }
+	  }
 #endif
 	  //BUG: Need to handle presets here
 	} // if op=model
@@ -3419,6 +3458,9 @@ void parseWheels(String val,int8_t rotor[4]){
 // check what command it is and execute it
 void parseCommand() {
   uint8_t i,r[4],j;
+#ifdef CLOCK
+  uint8_t hour,minute,second;
+#endif
   int8_t pos,pos2;
   int8_t cmd;
   char ch,ch2;
@@ -3445,6 +3487,7 @@ void parseCommand() {
     !SAVE
     !LOAD
     !LOGLEVEL
+    !TIME
     !DEBUG
     !VERBOSE
     !DUKW
@@ -3745,7 +3788,30 @@ void parseCommand() {
       }	
       Serial.print(F("%LOGLEVEL:"));
       Serial.println(logLevel);
-
+#ifdef CLOCK
+    } else if (cmd==CMD_TIME && clock_active!=missing){
+      //TIME - set the RTC
+      if (val.length()!=0){
+	if (val.toInt()<2400){
+	  hour=val.toInt()/100;
+	  minute=val.toInt()%100;
+	  second=0;
+	}else{
+	  hour=val.toInt()/10000;
+	  minute=(val.toInt()%10000)/100;
+	  second=val.toInt()%100;
+	}
+	i2c_write2(DS3231_ADDR,2,dec2bcd(hour));
+	i2c_write2(DS3231_ADDR,1,dec2bcd(minute));
+	i2c_write2(DS3231_ADDR,0,dec2bcd(second));
+      }
+      //      Serial.print(F("PSDEBUG: "));Serial.print(hour,DEC);Serial.print(F(" "));Serial.print(minute,DEC);Serial.print(F(" "));Serial.println(second,DEC);
+      Serial.print(F("%TIME:"));
+      printTime();
+      Serial.println();
+      //PSDEBUG
+      //      Serial.print(i2c_read(DS3231_ADDR,2),HEX);Serial.print(F(" "));Serial.print(i2c_read(DS3231_ADDR,1),HEX);Serial.print(F(" "));Serial.println(i2c_read(DS3231_ADDR,0),HEX);
+#endif
 #ifdef NOMEMLIMIT
     } else if (cmd==CMD_DEBUG){
       //DEBUG
@@ -4069,7 +4135,7 @@ void loop() {
 #endif
 
 #ifdef SoundBoard
-	case 'K': // turn on/off keyboard click sound
+	case 'K': // turn on/off all sound
 	  Serial.print(F("sound "));
 	  if (sound_active==active){
 	    Serial.println(F("OFF"));

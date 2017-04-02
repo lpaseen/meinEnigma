@@ -4168,7 +4168,7 @@ void loop() {
 
 #endif
 	case 'L': // turn on all lights
-	  Serial.println(F("All lighs on"));
+	  Serial.println(F("All lights on"));
 	  for (i = 0; i < 128; i++) {
 	    HT.setLed(i);
 	  }
@@ -4179,7 +4179,7 @@ void loop() {
 	  }
 	  while (HT.keysPressed()==1){delay(30);key=checkKB();}; // stick around until key is released
 	  // including all decimal points
-	  Serial.println(F("All lighs off"));
+	  Serial.println(F("All lights off"));
 	  for (i = 0; i < 128; i++) {
 	    HT.clearLed(i);
 	  }

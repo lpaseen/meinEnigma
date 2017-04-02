@@ -114,7 +114,7 @@
 
 //Select plugboard order, keyboard or numeric
 //on M4 the plugboard is organized in numeric order
-#define NUMERICPB 
+//#define NUMERICPB 
 
 //Include code for the sound board size:27716-25380=2336
 #define SoundBoard
@@ -4041,7 +4041,7 @@ void loop() {
   // to scan all keys including debounce we talking 20ms
   // and if key register is read faster than that it will be 0 on the second read within a 20ms frame
   // Page 17 in the datacheet hints about it.
-  // Waiting 30ms to be on the safe side
+  // Waiting 30ms to be on the safe side (since "1ms" may be counted differently)
   while ((millis()-ms) <30){
     serialEvent();
     if (!standalone){

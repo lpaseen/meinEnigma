@@ -58,7 +58,7 @@
  *   The are numbered 0-1-2-3 so walze/wheel/rotor 0 is that extra thin wheel the navy got.
  *   currentWalze always includes ring settings, only place it's adjusted for is in encryption.
  *   eeprom management will be simplified. 
- *    Drop the movement of save location and have it all at fixed positions. We still have 100000 saves quaranteed.
+ *    Drop the movement of save location and have it all at fixed positions. We still have 100000 saves guaranteed.
  *    Currently the array is 51 bytes and that would give at most 20 locations but by going
  *      with 15 locations of 64 bytes each we can easier change the content at a 
  *      later firmware revision and the code gets simpler at the cost of 4 presets.
@@ -652,12 +652,6 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
 };
   
 
-//TODO: 
-// Add something so we can have several presets in memory and then change between them
-//  settings.preset is a preset number. the non active ones are +100
-//  so if the active one is 1 and 2 is inactive we have two saved in eeprom
-//  one with preset=1 and one with preset=102
-//  this schema allows 100 (0-99) preset profiles which means we run out of eeprom space before we run out of profiles.
 //
 // EEPROM structure version - to be able to handle upgrades
 #define VERSION 0
@@ -698,7 +692,7 @@ unsigned long serialNumber;  /// static number stored in eeprom and set with oth
 
 /********************************/
 
-machineSettings_t settings; // current settings and also what is saved in eeprome
+machineSettings_t settings; // current settings and also what is saved in eeprom
 enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;    // whatever anything is plugged in anywhere
@@ -731,7 +725,7 @@ HT16K33 HT;
 #define GPPUB     0x0D // 
 #define INTFA     0x0E // Interrupt flag register
 #define INTFB     0x0F // 
-#define INTCAPA   0x10 // Interrupt captred value for port register
+#define INTCAPA   0x10 // Interrupt captured value for port register
 #define INTCAPB   0x11 // 
 #define GPIOA     0x12 // General purpose io register
 #define GPIOB     0x13 // 

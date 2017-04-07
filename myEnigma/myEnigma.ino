@@ -35,6 +35,7 @@
  *  v0.90 - changed lookup tables to match first PCB version
  *  v0.91 - fixed one rotor pinout being wrong way
  *  v0.92 - added more sound
+ *  v0.93 - JT: fixed UKW available display bug
  *
  *
  * TODO: a lot but some "highlights"...
@@ -107,7 +108,7 @@
 
 //Also search for "how version CODE_VERSION " and change that ("V")
 //value is version * 100 so v1.23=123
-#define CODE_VERSION 92
+#define CODE_VERSION 93
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -335,11 +336,11 @@ const uint8_t UKWB=1;
 const uint8_t UKWC=2;
 const uint8_t UKWBT=3;
 const uint8_t UKWCT=4;
+#ifdef NOMEMLIMIT
 const uint8_t UKWN=5;
 const uint8_t UKWK=6;
 //const uint8_t UKWD=7;
 //
-#ifdef NOMEMLIMIT
 const uint8_t UKWCNT=7; // count
 #else
 const uint8_t UKWCNT=5; // count
@@ -4218,7 +4219,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V092",0);
+	  displayString("V093",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

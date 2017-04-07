@@ -339,7 +339,11 @@ const uint8_t UKWN=5;
 const uint8_t UKWK=6;
 //const uint8_t UKWD=7;
 //
+#ifdef NOMEMLIMIT
 const uint8_t UKWCNT=7; // count
+#else
+const uint8_t UKWCNT=5; // count
+#endif
 //
 // http://www.cryptomuseum.com/crypto/enigma/ukwd/index.htm
 //static char ukwDA[] = "AOCDEFGHIJKLMNBPQRSTUVWXYZ"; // B-O is fixed, rest is configurable

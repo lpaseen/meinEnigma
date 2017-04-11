@@ -964,7 +964,7 @@ void playSound(uint16_t fileno, boolean wait=true) {
     sendCommand(dfcmd_PLAYNAME,fileno);
     //Wait for it to start playing
     cnt=0;
-    while (digitalRead(BUSY) == HIGH && cnt<100){cnt++;delay(1);}
+    while (digitalRead(BUSY) == HIGH && cnt<200){cnt++;delay(1);}
     retry--;
   } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
   
@@ -4144,13 +4144,13 @@ void loop() {
 	  Serial.print(F("sound "));
 	  if (sound_active==active){
 	    Serial.println(F("OFF"));
-	    playSound(2020,false); // sound
+	    playSound(2020); // sound
 	    playSound(2024); // off
 	    sound_active=inactive;
 	  } else if (sound_active==inactive){
 	    Serial.println(F("ON"));
 	    sound_active=active;
-	    playSound(2020,false); // sound
+	    playSound(2020); // sound
 	    playSound(2023); // on
 	  }else{
 	    Serial.println(F("missing"));
@@ -4160,13 +4160,13 @@ void loop() {
           Serial.print(F("TTS "));
           if (settings.tts){
             Serial.println(F("OFF"));
-	    playSound(2022,false); // tts
+	    playSound(2022); // tts
 	    playSound(2024); // off
             settings.tts=false;
           } else {
             Serial.println(F("ON"));
             settings.tts=true;
-	    playSound(2022,false); // tts
+	    playSound(2022); // tts
 	    playSound(2023); // on
           }
           break;

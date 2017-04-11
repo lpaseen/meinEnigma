@@ -39,7 +39,7 @@
  *
  *
  * TODO: a lot but some "highlights"...
- *   tigh everything together in a user usable interface
+ *   tie everything together in a user usable interface
  *   add sound
  *
  * Shortcomings (all due to lack of program space):
@@ -213,7 +213,7 @@ static const uint8_t morsecode[] PROGMEM={
 #define spkPin 13
 //#define SPK // Speaker/Piezo or simple BEEP thingy
 
-//toneFq and timeBase as variabes so they can be changed in sw later
+//toneFq and timeBase are variables so they can be changed in sw later
 uint8_t toneFq; // tone frequenze/100 so 1khz = 10 and 20khz=200
 uint8_t timeBase; //ms to base all numbers on
 #define timeDitt  timeBase
@@ -274,7 +274,7 @@ enum operationMode_t {run,plugboard,rotortype,ukw,model,none} operationMode;
 
 ///
 ///Serial input stuff, arduino serial input buffer is 64 bytes
-///max allowed msg lengh is 250 characters plus some spaces = 300
+///max allowed msg length is 250 characters plus some spaces = 300
 ///Tried to make this buffer larger hoping to be able to capture long strings but it's still issues
 /// possible due to delays in the main loop and speed it arrives at (64 bytes takes 0.55ms at 115200)
 ///
@@ -447,7 +447,7 @@ const char* const WALZE[] PROGMEM =
 #endif
   };
 
-//Can't figure out any simpler way to get lenght of WALZE[0][0]
+//Can't figure out any simpler way to get length of WALZE[0][0]
 #define letterCnt (int8_t)(strlen_P((char*)pgm_read_word(&WALZE[0]))) // the first is all letters and no notch
 
 //List of valid commands, must start with "!"
@@ -567,8 +567,8 @@ typedef struct {
   uint8_t walze4[2]; // array of valid rotors for 4th rotor
   ukw_t   ukwType;
   uint8_t ukw[4]; // array of valid reflector wheels
-  boolean doublestep; //whatever the middle rotor does doublestep or not.
-  boolean plugboard;  //whatever this model has a plugboard or not
+  boolean doublestep; //whether the middle rotor does doublestep or not.
+  boolean plugboard;  //whether this model has a plugboard or not
 } enigmaModels_t;
 
 /* C99 version, not supported in gcc c++, need to go with C89 then :(
@@ -670,10 +670,10 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
 //
 
 // calc 1+1+1+1+4+1+4+1+26+4+1+2
-//Maxumim number of presets
+//Maximum number of presets
 #define MAXPRESET 15 //end of eeprom is used for odometer and serial number
 //If settingsize is changed firmware upgrade with new format may 
-// not be possible without loosing all presets.
+// not be possible without losing all presets.
 #define SETTINGSIZE 64
 //also note that MAXPRESET*SETTINGSIZE < EEPROM.length()
 
@@ -699,8 +699,8 @@ unsigned long serialNumber;  /// static number stored in eeprom and set with oth
 
 machineSettings_t settings; // current settings and also what is saved in eeprom
 enigmaModels_t EnigmaModel; // attributes for the current enigma model
-boolean plugboardPresent=true;   // whatever the plugboard is physical(true) or virtual(false)
-boolean plugboardEmpty=false;    // whatever anything is plugged in anywhere
+boolean plugboardPresent=true;   // whether the plugboard is physical(true) or virtual(false)
+boolean plugboardEmpty=false;    // whether anything is plugged in anywhere
 boolean standalone=false;	 // If standalone (no hardware, just serialAPI)
 int8_t  resetLevel=100; 	 // threshold for reset, put as variable to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
@@ -914,7 +914,7 @@ void sendCommand(uint8_t cmd, uint16_t opt=0) {
   // http://www.picaxe.com/docs/spe033.pdf
   msgBuf[0]=0x7e; // start
   msgBuf[1]=0xff; // version
-  msgBuf[2]=6;    // Lenght = always 6
+  msgBuf[2]=6;    // Length = always 6
   msgBuf[3]=cmd;  // Command
   msgBuf[4]=0;    // Feedback with 0x41, 0 if no and 1 if yes
   msgBuf[5]=opt >> 8; // optional value high byte
@@ -949,7 +949,7 @@ void playSound(uint16_t fileno, boolean wait=true) {
   }
 
   if (wait){  //Should we make sure it's done playing
-    //it's just small snippets so it shouldn't take to long
+    //it's just small snippets so it shouldn't take too long
     cnt=0;
     while (digitalRead(BUSY) == LOW && cnt<300){
       cnt++;
@@ -1100,48 +1100,54 @@ void printTime(){
 void printSettings(){
   uint8_t i;
 
-  Serial.print(F("fwVersion: "));
+  Serial.print(F("Version: "));
   //  Serial.println(settings.fwVersion, HEX);
   Serial.print(CODE_VERSION/100,DEC);
   Serial.print(F("."));
   Serial.println(int(CODE_VERSION%100),DEC);
-  Serial.print(F("preset: "));
+  Serial.print(F("Preset: "));
   Serial.println(lastPreset,DEC);
   Serial.println();
-  Serial.print(F("Odo meter: "));
+  Serial.print(F("Odometer: "));
   Serial.println(odometer, DEC);
   if (!standalone){
-    Serial.print(F("morsecode: "));
+    Serial.print(F("Morse code: "));
     if (settings.morseCode){
       Serial.println(F("ON"));
     }else{
       Serial.println(F("OFF"));
     }
   }
+  Serial.print(F("TTS: "));
+  if (settings.tts) {
+      Serial.println(F("ON"));
+  } else {
+      Serial.println(F("OFF"));
+  }
   Serial.print(F("Serial number: "));
   Serial.println(serialNumber, DEC);
   Serial.println();
 
-  Serial.print(F("model: "));
+  Serial.print(F("Model: "));
   printModel();
   Serial.print(F("("));
   printModelDescription();
   Serial.println(F(")"));
 
 #ifdef NOMEMLIMIT
-  Serial.print(F("entry wheel: "));
+  Serial.print(F("Entry wheel: "));
   Serial.println(settings.etw, DEC);//Should be dynamic but we only support one version so no point in writing it out
   printUKW(settings.etw);
   Serial.println();
 #endif  
-  Serial.print(F("reflector: "));
+  Serial.print(F("Reflector: "));
   printUKW(settings.ukw);
   Serial.println();
   Serial.print(F("Rotors: "));
   printRotor(&settings.walze[0]);
 
   Serial.println();
-  Serial.print(F("ringstellung: "));
+  Serial.print(F("Ringstellung: "));
   printWheel(&settings.ringstellung[0]);
   Serial.println();
   Serial.print(F("Plugboard: "));
@@ -1165,12 +1171,12 @@ void printSettings(){
   }
   Serial.println();
 
-  Serial.print(F("currentWalze: "));
+  Serial.print(F("CurrentWalze: "));
   printWheel(&settings.currentWalze[0]);
   Serial.println();
 
   if (clock_active!=missing){
-    Serial.print(F("Time is :"));
+    Serial.print(F("Time is: "));
     printTime();
     Serial.println();
   }
@@ -1493,7 +1499,7 @@ uint8_t dec2bcd(uint8_t dec){
 /****************************************************************/
 // display something on one of the "wheels"
 //  rightmost wheel is 3
-//  leftmost is 0 and not avaliable on model M3
+//  leftmost is 0 and not available on model M3
 //
 void displayLetter(char letter, uint8_t walzeno) {
   uint8_t led;
@@ -1646,7 +1652,7 @@ void displayWalzes(){
 	      }else{
 		playSound(hour);
 	      }
-	      playSound(2016); // "a clock"
+	      playSound(2016); // "o'clock"
 	    } //if first after change
 	  } // if full hour
 #endif
@@ -1863,21 +1869,21 @@ void checkSwitchPos(){
       Serial.print(adcval);
       Serial.print(F(": "));
     }
-    Serial.print(F("machine mode: "));
+    Serial.print(F("Machine mode: "));
     Serial.println(newModeTxt);
 
     //Sanity check, if model changed the UKW/Walze/ETW may no longer be valid
     //Check done here since at this point the model is set
     //If done in checkWalze you would lose your config if you go from M4 to M3 and back to M4
     sanitizeSettings();
-    settings.etw=EnigmaModel.etw; // each model only have one valid ETW
+    settings.etw=EnigmaModel.etw; // each model only has one valid ETW
 
     for (i=0;i<WALZECNT;i++){ // clear all decimalpoints, to be set according to settings later and make sure settings is valid
       decimalPoint(i,false);
       if (settings.ringstellung[i] < 0 || settings.ringstellung[i] >= letterCnt) settings.ringstellung[i]=0;
       if (settings.currentWalze[i] < 0 || settings.currentWalze[i] >= letterCnt) settings.currentWalze[i]=0;
     }
-    if (settings.plugboardMode==config) // if we where in config mode, move on to virtual plugboard before saving it
+    if (settings.plugboardMode==config) // if we were in config mode, move on to virtual plugboard before saving it
       settings.plugboardMode=virtualpb;
     saveSettings(0);
     operationMode=newMode;
@@ -1927,7 +1933,7 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.print(F("My enigma v"));
+  Serial.print(F("MeinEnigma v"));
   Serial.print(CODE_VERSION/100,DEC);
   Serial.print(F("."));
   Serial.println(int(CODE_VERSION%100),DEC);
@@ -1947,7 +1953,7 @@ void setup() {
     odometer=0;
     loadDefaults();
   } else {
-    Serial.print(F("Checksum seems ok, ("));
+    Serial.print(F("Checksum seems OK, ("));
     Serial.print(settings.checksum,HEX);
     Serial.println(F(") keeping the values"));
   }
@@ -1966,7 +1972,7 @@ void setup() {
   if (minute==0xFFFF){
     clock_active=missing; // no clock
   }else{
-    Serial.print(F("Time is :"));
+    Serial.print(F("Time is: "));
     printTime();
     Serial.println();
   }
@@ -2090,7 +2096,7 @@ void setup() {
 #ifdef SoundBoard
       playSound(2000); // "meinEnigma"
       playSound(2014); // "ready"
-//can't be played here, looses power, dunno why      playSound(2200); // "All keys and settings are now erased, please poweroff."
+//can't be played here, loses power, dunno why      playSound(2200); // "All keys and settings are now erased, please power off."
 #endif
       while (analogRead(RESET) < resetLevel){} // wait for button to be released.
   } else {
@@ -2106,7 +2112,7 @@ void setup() {
 #endif
      
   if (!standalone){  
-    Serial.println(F("All LEDs OFF"));
+    Serial.println(F("All LEDs off"));
     HT.clearAll();
     //    for (i=0;i<sizeof(HT.displayRam);i++)
     //      HT.displayRam[i]=0;
@@ -2582,7 +2588,7 @@ boolean checkWalzes() {
 #ifdef DEBUGDUP
 		    Serial.print(x-1);Serial.print(F(" "));Serial.print(pbpairs[x-1][0],DEC);Serial.print(F(" "));Serial.println(pbpairs[x-1][1],DEC);//PSDEBUG
 		    if (x>12){ //should never get here
-		      Serial.print(F("PSDEBUG: - error, to many pairs!!!"));
+		      Serial.print(F("PSDEBUG: - error, too many pairs!!!"));
 		      break;
 		    }//PSDEBUG
 #endif
@@ -2648,7 +2654,7 @@ boolean checkWalzes() {
 	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
 	      }
 	      if (x==26){
-		Serial.println(F("To many DUPs found - abort "));
+		Serial.println(F("Too many DUPs found - abort "));
 		for (i = 0; i < 13; i++) {
 		  Serial.print(i);Serial.print(F(" "));Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);
 		}
@@ -2768,7 +2774,7 @@ boolean checkWalzes() {
 	    Serial.println(settings.ukw);
 #endif
 	  }
-	  // here would changing of ETW when walzeNo==3 be but each model only have one option there so nothing to change.
+	  // here would changing of ETW when walzeNo==3 be but each model only has one option there so nothing to change.
 	  
 	  // **************** MODEL ****************
 	} else if (operationMode==model){
@@ -2979,7 +2985,7 @@ void checkPlugboard() {
   if (memcmp(settings.plugboard.letter, newplugboard.letter, sizeof(settings.plugboard)) != 0){
     memcpy(settings.plugboard.letter, newplugboard.letter,sizeof(settings.plugboard));
 #ifdef NOMEMLIMIT
-    // here is some psuedocode to update settings.plugboard.letter[] according to current uhr setting
+    // here is some pseudocode to update settings.plugboard.letter[] according to current uhr setting
     // this code need to be made for progmem and tested
     // it is more like notes for how to do it
     // 1 extract the plug pairs from settings.plugboard.letter
@@ -3011,7 +3017,7 @@ void checkPlugboard() {
   }
 #endif
 
-    if (settings.plugboardMode==config) // if we where in config mode, move on to virtual plugboard before saving it
+    if (settings.plugboardMode==config) // if we were in config mode, move on to virtual plugboard before saving it
       settings.plugboardMode=virtualpb;
     saveSettings(0);
     if (logLevel>1){
@@ -3149,7 +3155,7 @@ void rotateWheel(){
     Serial.println(F(":Found a notch, move next"));
 #endif
     //Middle was on a notch, need to rotate left wheel also
-    //This only happens if the (de)cryption _starts_ on a notch, then it's no doblestep
+    //This only happens if the (de)cryption _starts_ on a notch, then it's no doublestep
     i--;
     // Next wheel, leftmost in M3
     _rotateSingleWheel(i);
@@ -3366,7 +3372,7 @@ char encrypt(char ch){
 #endif
 
   //Next, the ETW
-  // handle prev weels rotation
+  // handle prev wheels rotation
   ch+=settings.ringstellung[WALZECNT-1]-settings.currentWalze[WALZECNT-1];
 #ifdef DEBUGRS
   Serial.print(ch,DEC);
@@ -3535,7 +3541,7 @@ void parseCommand() {
   */
 
   pos=serialInputBuffer.indexOf('?');
-  if (pos <0){ // if not questionmark
+  if (pos <0){ // if not question mark
     pos=serialInputBuffer.indexOf(':');
   }
   
@@ -3704,7 +3710,7 @@ void parseCommand() {
 
     } else if (cmd==CMD_RING){
       // RING
-      // should accept space separted numeric
+      // should accept space separated numeric
       if (val.length()!=0){
 	parseWheels(val,&settings.ringstellung[0]);
       }
@@ -3935,7 +3941,7 @@ void loop() {
     if (analogRead(RESET) < resetLevel){
       eraseEEPROM();
 #ifdef SoundBoard
-      playSound(2200); // "All keys and settings are now erased, please poweroff."
+      playSound(2200); // "All keys and settings are now erased, please power off."
 #endif
       for (i = 0; i < 128; i++) {
 	HT.setLed(i);
@@ -4036,16 +4042,16 @@ void loop() {
   /* Update switch position */
   checkSwitchPos();
  
-  // Don't check to fast or it won't work!
-  // to scan all keys including debounce we talking 20ms
+  // Don't check too fast or it won't work!
+  // to scan all keys including debounce we're talking 20ms
   // and if key register is read faster than that it will be 0 on the second read within a 20ms frame
-  // Page 17 in the datacheet hints about it.
+  // Page 17 in the datasheet hints about it.
   // Waiting 30ms to be on the safe side (since "1ms" may be counted differently)
   while ((millis()-ms) <30){
     serialEvent();
     if (!standalone){
       // and while we wait - check the rotors to have good response there
-      if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) where changed
+      if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) were changed
 	displayWalzes();
       }
       if (logLevel>1)
@@ -4617,7 +4623,7 @@ void serialEvent() {
 
       // if the incoming character is a newline, set a flag
       // so the main loop can do something about it:
-      //make sure we don't go to far, just force in a new line after MAXSERIALBUFF characters
+      //make sure we don't go too far, just force in a new line after MAXSERIALBUFF characters
       if (serialInputBuffer.length()==MAXSERIALBUFF-2){
 	serialInputBuffer += '\n';
 	inChar = '\n';

@@ -678,7 +678,7 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
 //also note that MAXPRESET*SETTINGSIZE < EEPROM.length()
 
 typedef struct {
-  uint8_t   fwVersion;         /// firmware version
+  uint8_t   fwVersion;         /// firmware version, saved here to make it possible to do fw upgrade without loosing eeprom info
   enigmaModel_t model;
   uint8_t   ukw;               /// Umkehrwalze - what reflector that is loaded
   uint8_t   walze[WALZECNT];   /// what wheel that currently is in the 3 or 4 positions
@@ -1101,7 +1101,6 @@ void printSettings(){
   uint8_t i;
 
   Serial.print(F("Version: "));
-  //  Serial.println(settings.fwVersion, HEX);
   Serial.print(CODE_VERSION/100,DEC);
   Serial.print(F("."));
   Serial.println(int(CODE_VERSION%100),DEC);

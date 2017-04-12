@@ -724,7 +724,7 @@ HT16K33 HT;
 #define DEFVALB   0x07 // 
 #define INTCONA   0x08 // Interrupt on change control register
 #define INTCONB   0x09 // 
-#define IOCON     0x0A // Control register
+//#define IOCON   0x0A // Control register
 #define IOCON     0x0B // 
 #define GPPUA     0x0C // GPIO Pull-ip resistor register
 #define GPPUB     0x0D // 
@@ -850,7 +850,7 @@ uint8_t i2c_write2(uint8_t unitaddr,uint8_t val1,uint8_t val2){
 ///
 uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
   i2c_write(unitaddr,addr);
-  Wire.requestFrom(unitaddr,1);
+  Wire.requestFrom(unitaddr, (uint8_t)1);
   return Wire.read();    // read one byte
 }
 
@@ -862,9 +862,9 @@ uint8_t i2c_read(uint8_t unitaddr,uint8_t addr){
 uint16_t i2c_read2(uint8_t unitaddr,uint8_t addr){
   uint16_t val;
   i2c_write(unitaddr,addr);
-  Wire.requestFrom(unitaddr, 1);
+  Wire.requestFrom(unitaddr, (uint8_t)1);
   val=Wire.read();
-  Wire.requestFrom(unitaddr, 1);
+  Wire.requestFrom(unitaddr, (uint8_t)1);
   return Wire.read()<<8|val;
 }
 
@@ -1461,9 +1461,9 @@ void setConfig(enigmaModel_t model,
 	       uint8_t rotor2,
 	       uint8_t rotor3,
 	       uint8_t etw,
-	       char    ringSetting[WALZECNT],	//=" AAA"
-	       char    plugboard[40],		//="AB CD EF GH IJ KL MN OP QR ST UV WX YZ",
-	       char    currentrotor[WALZECNT]	//=" AAA"
+	       const char    ringSetting[WALZECNT],	//=" AAA"
+	       char          plugboard[40],		//="AB CD EF GH IJ KL MN OP QR ST UV WX YZ",
+	       const char    currentrotor[WALZECNT]	//=" AAA"
 	       ){
   uint8_t i;
   char ch,ch2;
@@ -1534,7 +1534,7 @@ void displayLetter(char letter, uint8_t walzeno) {
 /****************************************************************/
 // scroll out message at the speed of "sleep"
 // 
-void displayString(char msg[], uint16_t sleep) {
+void displayString(const char msg[], uint16_t sleep) {
   uint8_t i;
 
   if (standalone)
@@ -1897,7 +1897,7 @@ void checkSwitchPos(){
 //Set up a factory default config
 void loadDefaults(){
   //Clear the settings currently in memory(SRAM)
-  setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",""," AAA");
+  setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",(char*)""," AAA");
   settings.fwVersion = VERSION;
   settings.plugboardMode=physicalpb;
   settings.grpsize  = 5; // size of groups printed over serial
@@ -2157,7 +2157,7 @@ void setup() {
 	  Serial.println();
 	  Serial.println(F("Preset 1 - M3,UKWB, wheel III,II,I, ringstell AAA:"));
 #endif
-	  setConfig(M3,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",""," AAA");
+	  setConfig(M3,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)""," AAA");
 	}
 	break;
       case '1':
@@ -2167,7 +2167,7 @@ void setup() {
 	  Serial.println();
 	  Serial.println(F("Preset 2 - M4,UKWBt, wheel beta,III,II,I, ringstell AAAA:"));
 #endif
-	  setConfig(M4,UKWBT,WALZE_Beta,WALZE_III,WALZE_II,WALZE_I,ETW0,"AAAA","","AAAA");
+	  setConfig(M4,UKWBT,WALZE_Beta,WALZE_III,WALZE_II,WALZE_I,ETW0,"AAAA",(char *)"","AAAA");
 	}
 	break;
       case '2':
@@ -2177,7 +2177,7 @@ void setup() {
 	  Serial.println();
 	  Serial.println(F("Preset 3 - M3, wheel I,II,III, ringstell AAA"));
 #endif
-	  setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",""," AAA");
+	  setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",(char *)""," AAA");
 	}
 	break;
       case '3':
@@ -2188,7 +2188,7 @@ void setup() {
 	  Serial.println(F("Preset 4 - NORW,UKWN, wheel NIII,NII,NI, ringstell AAA:"));
 	  setConfig(NorwayEnigma,UKWN,WALZE0,WALZE_NIII,WALZE_NII,WALZE_NI,ETW0," AAA",""," AAA");
 #else
-	  setConfig(EnigmaI,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA","AB CD EF GH IJ KL MN OP QR ST"," AAA");
+	  setConfig(EnigmaI,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)"AB CD EF GH IJ KL MN OP QR ST"," AAA");
 #endif
 	}
 	break;

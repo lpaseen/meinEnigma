@@ -2567,7 +2567,7 @@ boolean checkWalzes() {
 	    // **************** Plugboard ****************
 	} else if (operationMode==plugboard){
 	  if (walzeNo==0){
-	    if (settings.plugboardMode==virtualpb){
+	    if (settings.plugboardMode==virtualpb || settings.plugboardMode == config) {
 	      settings.plugboardMode=physicalpb;
 	      //Clearing of the plugboard values will be done next time it's checked
 	    }else if (settings.plugboardMode==physicalpb) {

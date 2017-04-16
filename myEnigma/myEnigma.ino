@@ -4229,6 +4229,18 @@ void loop() {
 	  delay(2000);
 	  decimalPoint(1,false);
 	  break;
+
+	case 'Q': // save preset 1 - 4
+	case 'W':
+	case 'E':
+	case 'R':
+          char strBuffer[] = "PR X";
+	  strBuffer[3] = '0' + key;
+	  displayString(strBuffer, 0);
+	  saveSettings(key);
+	  delay(2000);
+	  break;
+
 	} // switch
 	for (i=0;i<sizeof(prevRamState);i++){HT.displayRam[i]=prevRamState[i];} // Restore current state
 	HT.sendLed();

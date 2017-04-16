@@ -1080,10 +1080,15 @@ void printPlugboard(){
 /****************************************************************/
 void printTime(){
   uint8_t hour,minute,second;
+  uint8_t year, month, day;
 
+  year = i2c_read(DS3231_ADDR,6);
+  month = i2c_read(DS3231_ADDR,5);
+  day = i2c_read(DS3231_ADDR,4);
   hour=i2c_read(DS3231_ADDR,2);
   minute=i2c_read(DS3231_ADDR,1);
   second=i2c_read(DS3231_ADDR,0);
+
   if (hour<0x10){Serial.print(F("0"));}
   Serial.print(hour,HEX);
   Serial.print(F(":"));
@@ -1092,6 +1097,14 @@ void printTime(){
   Serial.print(F(":"));
   if (second<0x10){Serial.print(F("0"));}
   Serial.print(second,HEX);
+  Serial.print(" 20");
+  Serial.print(year, HEX);
+  Serial.print("-");
+  if (month < 0x10) { Serial.print(F("0")); }
+  Serial.print(month, HEX);
+  Serial.print("-");
+  if (day < 0x10) { Serial.print(F("0")); }
+  Serial.print(day, HEX);
 
 } // printTime
 #endif
@@ -3464,6 +3477,7 @@ void parseCommand() {
   uint8_t i,r[4],j;
 #ifdef CLOCK
   uint8_t hour,minute,second;
+  uint8_t day, month, year;
 #endif
   int8_t pos,pos2;
   int8_t cmd;
@@ -3794,21 +3808,64 @@ void parseCommand() {
       Serial.println(logLevel);
 #ifdef CLOCK
     } else if (cmd==CMD_TIME && clock_active!=missing){
-      //TIME - set the RTC
-      if (val.length()!=0){
-	if (val.toInt()<2400){
-	  hour=val.toInt()/100;
-	  minute=val.toInt()%100;
-	  second=0;
-	}else{
-	  hour=val.toInt()/10000;
-	  minute=(val.toInt()%10000)/100;
-	  second=val.toInt()%100;
-	}
-	i2c_write2(DS3231_ADDR,2,dec2bcd(hour));
-	i2c_write2(DS3231_ADDR,1,dec2bcd(minute));
-	i2c_write2(DS3231_ADDR,0,dec2bcd(second));
+      //TIME - set the RTC. Accepted formats: hmm  hhmm  hhmmss  yyyymmdd  yyyymmddhhmm  yyyymmddhhmmss
+      year = bcd2dec(i2c_read(DS3231_ADDR,6));
+      month = bcd2dec(i2c_read(DS3231_ADDR,5));
+      day = bcd2dec(i2c_read(DS3231_ADDR,4));
+      hour = bcd2dec(i2c_read(DS3231_ADDR,2));
+      minute = bcd2dec(i2c_read(DS3231_ADDR,1));
+      second = bcd2dec(i2c_read(DS3231_ADDR,0));
+
+      switch (val.length()) {
+      case 0:
+          break;
+      case 3: // hmm
+          hour = val.substring(0,1).toInt();
+          minute = val.substring(1,3).toInt();
+          break;
+      case 4: // hhmm
+          hour = val.substring(0,2).toInt();
+          minute = val.substring(2,4).toInt();
+          break;
+      case 6: // hhmmss
+          hour = val.substring(0,2).toInt();
+          minute = val.substring(2,4).toInt();
+          second = val.substring(4,6).toInt();
+          break;
+      case 8: // yyyymmdd
+          year = val.substring(2,4).toInt();
+          month = val.substring(4,6).toInt();
+          day = val.substring(6,8).toInt();
+          break;
+      case 12: // yyyymmddhhmm
+          year = val.substring(2,4).toInt();
+          month = val.substring(4,6).toInt();
+          day = val.substring(6,8).toInt();
+          hour = val.substring(8,10).toInt();
+          minute = val.substring(10,12).toInt();
+          break;
+      case 14: // yyyymmddhhmmss
+          year = val.substring(2,4).toInt();
+          month = val.substring(4,6).toInt();
+          day = val.substring(6,8).toInt();
+          hour = val.substring(8,10).toInt();
+          minute = val.substring(10,12).toInt();
+          second = val.substring(12,14).toInt();
+          break;
+      default:
+          Serial.println(F("ERROR: invalid time/date"));
+          break;
       }
+
+      if (val.length() != 0) {
+          i2c_write2(DS3231_ADDR, 6, dec2bcd(year));
+          i2c_write2(DS3231_ADDR, 5, dec2bcd(month));
+          i2c_write2(DS3231_ADDR, 4, dec2bcd(day));
+          i2c_write2(DS3231_ADDR, 2, dec2bcd(hour));
+          i2c_write2(DS3231_ADDR, 1, dec2bcd(minute));
+          i2c_write2(DS3231_ADDR, 0, dec2bcd(second));
+      }
+
       //      Serial.print(F("PSDEBUG: "));Serial.print(hour,DEC);Serial.print(F(" "));Serial.print(minute,DEC);Serial.print(F(" "));Serial.println(second,DEC);
       Serial.print(F("%TIME:"));
       printTime();

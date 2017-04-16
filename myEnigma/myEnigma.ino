@@ -3973,7 +3973,7 @@ void loop() {
     serialInputBuffer.toUpperCase();
     serialInputBuffer.trim(); // trim off any trailing \n or white space.
     Serial.println();
-    Serial.println(serialInputBuffer);
+    //Serial.println(serialInputBuffer);
     if (serialInputBuffer.length()==0)
       serialInputBuffer="#";
     if (serialInputBuffer[0]=='#'){
@@ -4563,7 +4563,7 @@ void loop() {
     serialEvent();
     if (stringComplete) {
       Serial.print(F("Received something: "));
-      Serial.println(serialInputBuffer);
+      //Serial.println(serialInputBuffer);
       serialInputBuffer = "";
       stringComplete = false;
     }
@@ -4607,6 +4607,7 @@ void serialEvent() {
     while (Serial.available()) {
       // get the new byte:
       inChar = (char)Serial.read();
+      Serial.write(inChar); // Echo character
       if (inChar == '\r' ) { // treat carriage return as line feed
 	inChar='\n';
       }

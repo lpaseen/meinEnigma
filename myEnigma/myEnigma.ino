@@ -2525,7 +2525,9 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = down;
 #ifdef SoundBoard
-	  playSound(1201); // rotor click 1
+	  if ((clock_active==active && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
+	    playSound(1201); // rotor click 1
+	  }
 #endif
 	  break;
 	  
@@ -2537,7 +2539,9 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = up;
 #ifdef SoundBoard
-	  playSound(1202); // rotor click 2
+	  if ((clock_active==active && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
+	    playSound(1202); // rotor click 2
+	  }
 #endif
 	  break;
 	} // switch

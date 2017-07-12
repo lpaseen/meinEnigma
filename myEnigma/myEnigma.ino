@@ -278,7 +278,7 @@ enum operationMode_t {run,plugboard,rotortype,ukw,model,none} operationMode;
 ///Tried to make this buffer larger hoping to be able to capture long strings but it's still issues
 /// possible due to delays in the main loop and speed it arrives at (64 bytes takes 0.55ms at 115200)
 ///
-#define MAXSERIALBUFF 150
+#define MAXSERIALBUFF 210   /// max size is about 210, anything bigger and commands stops working (255-longest command(!Plugboard:AB CD EF GH IJ KL MN OP QR ST)- '\0')
 String serialInputBuffer = "";         /// a string to hold incoming data
 boolean stringComplete = false;  /// whether the string is complete
 
@@ -964,7 +964,7 @@ void playSound(uint16_t fileno, boolean wait=true) {
     sendCommand(dfcmd_PLAYNAME,fileno);
     //Wait for it to start playing
     cnt=0;
-    while (digitalRead(BUSY) == HIGH && cnt<100){cnt++;delay(1);}
+    while (digitalRead(BUSY) == HIGH && cnt<200){cnt++;delay(1);}
     retry--;
   } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
   
@@ -998,9 +998,11 @@ char normalize(char ch){
 
 /****************************************************************/
 void printValError(String val){
-  Serial.print(F("%ERROR: Unknown/Illegal value specified >"));
-  Serial.print(val);
-  Serial.println(F("< keeping old setting."));
+  if (val.charAt(0) != '?'){
+    Serial.print(F("%ERROR: Unknown/Illegal value specified >"));
+    Serial.print(val);
+    Serial.println(F("< keeping old setting."));
+  }
 } // printValError
 
 /****************************************************************/
@@ -1425,14 +1427,6 @@ void  copyEnigmaModel(enigmaModel_t model){
   }
 } // copyEnigmaModel
 
-/****************************************************************/
-// from https://learn.adafruit.com/memories-of-an-arduino/measuring-free-memory
-int freeRam () 
-{
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
-}
 
 /****************************************************************/
 void parsePlugboard(char* plugboard){
@@ -3496,74 +3490,86 @@ void parseCommand() {
   enigmaModels_t checkModel;
   
   /*
+
     command starts with "!"
     a ":" separate command from values
     nothing after ":" means show current setting
     any command can be shortened until it's unique
     Commands;
-    !MODEL
     !SETTINGS
+    !MODEL
     !UKW
     !ROTOR
     !RING
-    !START
     !PLUGBOARD
-    !GROUP
+    !START
+    !GROUPSIZE
     !SAVE
     !LOAD
     !LOGLEVEL
     !TIME
-    !DEBUG
-    !VERBOSE
-    !DUKW
+
     "#" as input is treated as a comment and ignored
-    "# as output is respond to a command
+    "% as output is respond to a command
     A-Z is text to encrypt/decrypt
     ">" starts a encrypted/decrypted text response
     Sample:
-    !MODEL?
-    #MODELS:
-    # M3
-    # M4
-    !MODEL: M3
-    #MODEL:M3
-    !SETTINGS:
-    #Settings; M3:B:I-II-III:AAA:AAA:
-    !UKW: B
-    #UKW:B
-    !ROT: VII-I-IV
-    #ROTOR:VII-I-IV
-    !WALZE: 6,1,3
-    #WALZE:VI-I-III
-    !RING: A B C
-    #RING:A B C
-    !PLUGBOARD: TH EQ UI CK BR OW NF XJ MP SV
-    #PLUGBOARD:BR CK EQ MP NF OW SV TH UI XJ
-    !START: FSF
-    #Rotor start set to: F S F
-    !SETTINGS:
-    #SETTINGS:M3,B,VI-I-III,ABC,FSF,BR CK EQ MP NF OW SV TH UI XJ
-    !SAVE:1
-    #Settings saved as preset:1
-    ENI
-    >
-    !START: OLD
-    #Rotor start set to; O L D
-    RBRHY ESYXZ KVDKA IIVOU UYIZG LOBSF OVFGM FQVT
-    >(the decrypted text)
-
-    !LOAD:2
-    #Loaded preset 2
-    #SETTINGS:M3,B,V-I-IV,XYZ,FSF,
-    !SETTINGS:M3,B,6-1-3,ABC,FSF,H EQ UI CK BR OW NF XJ MP SV
-    #SETTINGS:M3,B,VI-I-III,ABC,FSF,BR CK EQ MP NF OW SV TH UI XJ
+    !Model:M3
+    %MODEL:M3
+    !UKW:UKWB
+    %UKW: UKWB
+    !Rotor:1,7,3
+    %ROTOR:    I - VII - III
+    !Ring:X,D,R
+    %RING: - X D R
+    !PL:EQ UI CK BR OW NF XJ MP SV
+    %PLUGBOARD: BR CK EQ FN IU JX MP OW SV
+    !SE
+    Version: 0.94
+    Preset: 1
+    
+    Odometer: 53937
+    TTS: ON
+    Serial number: 4000001001
+    
+    Model: M3  (Enigma M3, German Navy (Kriegsmarine))
+    Reflector: UKWB
+    Rotors:    I - VII - III
+    Ringstellung: - X D R
+    Plugboard: virtual - BR CK EQ FN IU JX MP OW SV
+    CurrentWalze: - I Q Z
+    !sta:abc
+    %START: - A B C
+    !sav:1
+    %SAVE - Save settings as preset 1
+    
+    meinenigma
+    >CJCQP VAOKG
+    !loa:1
+    %LOAD - Read settings from preset 1
+    Version: 0.94
+    Preset: 1
+    
+    Odometer: 53957
+    TTS: ON
+    Serial number: 4000001001
+    
+    Model: M3  (Enigma M3, German Navy (Kriegsmarine))
+    Reflector: UKWB
+    Rotors:    I - VII - III
+    Ringstellung: - X D R
+    Plugboard: virtual - BR CK EQ FN IU JX MP OW SV
+    CurrentWalze: - A B C
+    
+    CJCQP VAOKG
+    >MEINE NIGMA
 
   */
 
-  pos=serialInputBuffer.indexOf('?');
-  if (pos <0){ // if not question mark
+  //  pos=serialInputBuffer.indexOf('?');
+  //  if (pos <0){ // if not question mark
     pos=serialInputBuffer.indexOf(':');
-  }
+    //  }
   
   if (pos==-1){
     // if no colon is given, behave as if it was one in the end
@@ -3984,6 +3990,14 @@ void loop() {
 #endif
 
 #ifdef PSDEBUG
+/****************************************************************/
+// from https://learn.adafruit.com/memories-of-an-arduino/measuring-free-memory
+int freeRam () 
+{
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
   //PSDEBUG
   freeNow=freeRam();
   if (freeNow != prevFreeRam){

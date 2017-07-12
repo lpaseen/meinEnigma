@@ -86,11 +86,11 @@
  *Milestone:
  *
  *
- *
+ *PWM pins:3,5,6,9,10,11
  *Port assignment:
  * d0/d1 - Serial port
  * d2,3,4,5,6,7 encoder
- * d8,9 - soundboard io
+ * d8,9 - soundboard io - hardwired, can't be changed
  * d10,11 encoder
  * d12 - soundboard busy
  * d13 - buzzer 
@@ -107,7 +107,7 @@
 */
 
 //Also search for "how version CODE_VERSION " and change that ("V")
-//value is version * 100 so v1.23=123
+//value is version * 100 so 123 means v1.23
 #define CODE_VERSION 93
 
 //the prototype has a few things different
@@ -230,7 +230,7 @@ uint8_t timeBase; //ms to base all numbers on
 //[wheel1low,wheel1high,wheel2low,wheel2high...
 
 #define WALZECNT 4
-//if count is something else than 4 the pin this definitions (and several other things) also need to change
+//if count is something else than 4 then this definitions (and several other things) also need to change
 static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {3, 2, 4, 5, 6, 7, 10,11};
 volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last change happened
@@ -453,22 +453,22 @@ const char* const WALZE[] PROGMEM =
 //List of valid commands, must start with "!"
 #ifdef NOMEMLIMIT
 #ifdef GERMAN
-const char APICMDLIST[] PROGMEM = "!EINSTELLUNGEN!MODELL!UKW!WALZE!RINGSTELLUNG!STECKERBRETT!ANZFANG!TEILNEHMER!SPAREN!LADEN!LOGDATEI!DEBUG!AUSFÜHRLICHE!DUKW!";
+const char APICMDLIST[] PROGMEM = "!EINSTELLUNGEN!MODELL!UKW!WALZE!RINGSTELLUNG!STECKERBRETT!ANZFANG!TEILNEHMER!SPAREN!LADEN!LOGDATEI!DEBUG!AUSFÜHRLICHE!DUKW";
 #else
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZESAVE!LOAD!LOGLEVEL!DEBUG!VERBOSE!DUKW!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZESAVE!LOAD!LOGLEVEL!DEBUG!VERBOSE!DUKW";
 #endif
 #else
 #ifdef GERMAN
 #ifdef CLOCK
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!TIME!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!TIME";
 #else
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!WALZE!RING!PLUGBOARD!START!GROUPSIZE|SAVE!LOAD!LOGLEVEL";
 #endif
 #else
 #ifdef CLOCK
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!TIME!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!TIME";
 #else
-const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL!";
+const char APICMDLIST[] PROGMEM = "!SETTINGS!MODEL!UKW!ROTOR!RING!PLUGBOARD!START!GROUPSIZE!SAVE!LOAD!LOGLEVEL";
 #endif
 #endif
 #endif
@@ -1174,11 +1174,13 @@ void printSettings(){
   printWheel(&settings.currentWalze[0]);
   Serial.println();
 
+#ifdef CLOCK
   if (clock_active!=missing){
     Serial.print(F("Time is: "));
     printTime();
     Serial.println();
   }
+#endif
 
 } // printSettings
 

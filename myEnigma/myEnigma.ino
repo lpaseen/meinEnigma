@@ -108,7 +108,7 @@
 
 //Also search for "how version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 93
+#define CODE_VERSION 94
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -951,13 +951,13 @@ void playSound(uint16_t fileno, boolean wait=true) {
   if (wait){  //Should we make sure it's done playing
     //it's just small snippets so it shouldn't take too long
     cnt=0;
-    while (digitalRead(BUSY) == LOW && cnt<300){
+    while (digitalRead(BUSY) == LOW && cnt<1500){
       cnt++;
       delay(10);
     }
   }
 
-  retry=3;
+  retry=10;
   do {
     //Send play command
     //    sendCommand(dfcmd_PLAYNO,fileno);
@@ -4207,13 +4207,13 @@ void loop() {
 	  Serial.print(F("sound "));
 	  if (sound_active==active){
 	    Serial.println(F("OFF"));
-	    playSound(2020,false); // sound
+	    playSound(2020); // sound
 	    playSound(2024); // off
 	    sound_active=inactive;
 	  } else if (sound_active==inactive){
 	    Serial.println(F("ON"));
 	    sound_active=active;
-	    playSound(2020,false); // sound
+	    playSound(2020); // sound
 	    playSound(2023); // on
 	  }else{
 	    Serial.println(F("missing"));
@@ -4223,13 +4223,13 @@ void loop() {
           Serial.print(F("TTS "));
           if (settings.tts){
             Serial.println(F("OFF"));
-	    playSound(2022,false); // tts
+	    playSound(2022); // tts
 	    playSound(2024); // off
             settings.tts=false;
           } else {
             Serial.println(F("ON"));
             settings.tts=true;
-	    playSound(2022,false); // tts
+	    playSound(2022); // tts
 	    playSound(2023); // on
           }
           break;
@@ -4288,7 +4288,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V093",0);
+	  displayString("V094",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

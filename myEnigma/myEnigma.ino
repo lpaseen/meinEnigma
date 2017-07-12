@@ -1089,7 +1089,16 @@ void printTime(){
   minute=i2c_read(DS3231_ADDR,1);
   second=i2c_read(DS3231_ADDR,0);
 
-  if (hour<0x10){Serial.print(F("0"));}
+  Serial.print(F("20"));
+  Serial.print(year, HEX);
+  Serial.print(F("-"));
+  if (month < 0x10) { Serial.print(F("0")); }
+  Serial.print(month, HEX);
+  Serial.print("-");
+  if (day < 0x10) { Serial.print(F("0")); }
+  Serial.print(day, HEX);
+
+  if (hour<0x10){Serial.print(F(" 0"));}else{Serial.print(F(" "));}
   Serial.print(hour,HEX);
   Serial.print(F(":"));
   if (minute<0x10){Serial.print(F("0"));}
@@ -1097,14 +1106,6 @@ void printTime(){
   Serial.print(F(":"));
   if (second<0x10){Serial.print(F("0"));}
   Serial.print(second,HEX);
-  Serial.print(" 20");
-  Serial.print(year, HEX);
-  Serial.print("-");
-  if (month < 0x10) { Serial.print(F("0")); }
-  Serial.print(month, HEX);
-  Serial.print("-");
-  if (day < 0x10) { Serial.print(F("0")); }
-  Serial.print(day, HEX);
 
 } // printTime
 #endif

@@ -7,7 +7,7 @@
  *  know about them (yet).
  *  If it bugs you - fix it and tell me about it, that's the way I learn.
  *
- *  Copyright: Peter Sjoberg <peters-enigma AT techwiz DOT ca>
+ *  Copyright: Peter Sjoberg <peters-enigma AT techwiz DOT ca>+
  *  License: GPLv3
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License version 3 as 
@@ -21,7 +21,7 @@
  *    You should have received a copy of the GNU General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  Status: early beta, not much space left for any more features so concentrate on bug fixing.
+ *  Status: not much space left for any more features so concentrate on bug fixing.
  *
  *  History:
  *  v0.00 - test of library, keyboard and LEDs
@@ -36,13 +36,10 @@
  *  v0.91 - fixed one rotor pinout being wrong way
  *  v0.92 - added more sound
  *  v0.93 - JT: fixed UKW available display bug
+ *  v0.94 - implemented a few pull requests from JT.
  *
  *
- * TODO: a lot but some "highlights"...
- *   tie everything together in a user usable interface
- *   add sound
- *
- * Shortcomings (all due to lack of program space):
+ * TODO/Shortcomings (all due to lack of program space):
  *   No UKWD
  *   No UHR
  *   limited number of enigmas partly because

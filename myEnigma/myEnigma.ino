@@ -37,6 +37,7 @@
  *  v0.92 - added more sound
  *  v0.93 - JT: fixed UKW available display bug
  *  v0.94 - implemented a few pull requests from JT.
+ *  v1.00 - release version
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -48,14 +49,14 @@
  *   Limited functions on serial API
  *     picky about format entered
  *     ringstellung always letters
- *     walze is numeric
+ *     walze is only numeric
  *
  * Decisions:
  *   The wheels are numbered left to right since that's the order they are
  *   in codebooks and it's the natural order of things when reading left to right.
  *   The are numbered 0-1-2-3 so walze/wheel/rotor 0 is that extra thin wheel the navy got.
  *   currentWalze always includes ring settings, only place it's adjusted for is in encryption.
- *   eeprom management will be simplified. 
+ *   eeprom management is simplified. 
  *    Drop the movement of save location and have it all at fixed positions. We still have 100000 saves guaranteed.
  *    Currently the array is 51 bytes and that would give at most 20 locations but by going
  *      with 15 locations of 64 bytes each we can easier change the content at a 
@@ -71,16 +72,15 @@
  *	on the other hand, low on progmem so UKW-D does not fit.
  *   UHR doesn't fit in this version but if it did, maybe process it in encrypt() instead
  *	of remapping the plugboard - so it can be visualized in loglevel 2
- *
+ *   rewrite encrypt() in some less code consuming way, maybe a function to handle the rotor so same
+ *      code can be used both ways.
  *
  * BUGS:
- *      <s?>for virtual plugboard - need an empty so settings can be cleared also
+ *	pressing more than one key is handled wrong
  *      no code to handle presets except from serial
  *	doublestepping is hardcoded to always enabled
  *      plugboard enabled even for models that doesn't have a plugboard
- *	pressing more than one key is handled wrong
  *
- *Milestone:
  *
  *
  *PWM pins:3,5,6,9,10,11
@@ -103,9 +103,9 @@
  *
 */
 
-//Also search for "how version CODE_VERSION " and change that ("V")
+//Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 94
+#define CODE_VERSION 100
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -4299,7 +4299,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V094",0);
+	  displayString("V100",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

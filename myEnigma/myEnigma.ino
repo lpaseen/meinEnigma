@@ -1647,7 +1647,7 @@ void displayWalzes(){
 #endif
 	  hourminute=i2c_read2(DS3231_ADDR,1);
 #ifdef SoundBoard
-	  if ( (hourminute & 0xff)==0 && sound_active==active){ // we are at full hour and sound is not disabled
+	  if ( (hourminute & 0xff)==0 && sound_active==active && settings.tts==true){ // we are at full hour and sound is not disabled
 	    if (oldhourminute!=hourminute){ // and we just got there
 	      hour=bcd2dec(hourminute>>8);//figure out what hour it is
 	      if (hour ==0){

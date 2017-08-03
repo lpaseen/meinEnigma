@@ -38,6 +38,7 @@
  *  v0.93 - JT: fixed UKW available display bug
  *  v0.94 - implemented a few pull requests from JT.
  *  v1.00 - release version
+ *  v1.01 - minor fix, max sound timeout= 4 sec not 15 sec
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -105,7 +106,7 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 100
+#define CODE_VERSION 101
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -947,8 +948,9 @@ void playSound(uint16_t fileno, boolean wait=true) {
 
   if (wait){  //Should we make sure it's done playing
     //it's just small snippets so it shouldn't take too long
+    //max lenght is about 3sec so timeout after 4sec
     cnt=0;
-    while (digitalRead(BUSY) == LOW && cnt<1500){
+    while (digitalRead(BUSY) == LOW && cnt<400){
       cnt++;
       delay(10);
     }
@@ -961,7 +963,7 @@ void playSound(uint16_t fileno, boolean wait=true) {
     sendCommand(dfcmd_PLAYNAME,fileno);
     //Wait for it to start playing
     cnt=0;
-    while (digitalRead(BUSY) == HIGH && cnt<200){cnt++;delay(1);}
+    while (digitalRead(BUSY) == HIGH && cnt<400){cnt++;delay(1);}
     retry--;
   } while (digitalRead(BUSY) == HIGH && retry > 0); // if not started send again
   
@@ -4299,7 +4301,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V100",0);
+	  displayString("V101",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

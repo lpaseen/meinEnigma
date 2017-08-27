@@ -39,6 +39,7 @@
  *  v0.94 - implemented a few pull requests from JT.
  *  v1.00 - release version
  *  v1.01 - minor fix, max sound timeout= 4 sec not 15 sec
+ *  v1.02 - New PCB has correct pinorder for encoder 0
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -106,10 +107,13 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 101
+#define CODE_VERSION 102
 
 //the prototype has a few things different
 //#define PROTOTYPE
+
+//PCB rev 1 and later has encoder pins in numeric order
+#define PCBREV1
 
 //Select plugboard order, keyboard or numeric
 //on M4 the plugboard is organized in numeric order
@@ -229,7 +233,11 @@ uint8_t timeBase; //ms to base all numbers on
 
 #define WALZECNT 4
 //if count is something else than 4 then this definitions (and several other things) also need to change
+#ifdef PCBREV1
+static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {2, 3, 4, 5, 6, 7, 10,11};
+#else
 static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {3, 2, 4, 5, 6, 7, 10,11};
+#endif
 volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last change happened
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
@@ -4301,7 +4309,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V101",0);
+	  displayString("V102",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

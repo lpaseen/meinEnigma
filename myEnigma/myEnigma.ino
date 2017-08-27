@@ -1120,13 +1120,21 @@ void printTime(){
 #endif
 
 /****************************************************************/
-void printSettings(){
-  uint8_t i;
-
+void printVersion(){
   Serial.print(F("Version: "));
   Serial.print(CODE_VERSION/100,DEC);
   Serial.print(F("."));
+  if (int(CODE_VERSION%100) <10){
+    Serial.print(F("0"));
+  }
   Serial.println(int(CODE_VERSION%100),DEC);
+} // printVersion()
+
+/****************************************************************/
+void printSettings(){
+  uint8_t i;
+
+  printVersion();
   Serial.print(F("Preset: "));
   Serial.println(lastPreset,DEC);
   Serial.println();
@@ -1949,10 +1957,8 @@ void setup() {
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
-  Serial.print(F("MeinEnigma v"));
-  Serial.print(CODE_VERSION/100,DEC);
-  Serial.print(F("."));
-  Serial.println(int(CODE_VERSION%100),DEC);
+  Serial.print(F("MeinEnigma "));
+  printVersion();
 
 #ifdef TESTCRYPTO
   Serial.print(F(" Test crypto no "));

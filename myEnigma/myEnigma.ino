@@ -107,7 +107,7 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 102
+#define CODE_VERSION 103
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -2548,7 +2548,8 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = down;
 #ifdef SoundBoard
-	  if ((clock_active==active && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
+          //operationMode==model
+          if ((clock_active==active && operationMode==model && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active ){
 	    playSound(1201); // rotor click 1
 	  }
 #endif
@@ -2562,7 +2563,7 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = up;
 #ifdef SoundBoard
-	  if ((clock_active==active && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
+          if ((clock_active==active && operationMode==model && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
 	    playSound(1202); // rotor click 2
 	  }
 #endif
@@ -4315,7 +4316,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V102",0);
+	  displayString("V103",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

@@ -40,6 +40,8 @@
  *  v1.00 - release version
  *  v1.01 - minor fix, max sound timeout= 4 sec not 15 sec
  *  v1.02 - New PCB has correct pinorder for encoder 0
+ *  v1.03 - Fixed clock mode sound mute bug
+ *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -107,7 +109,7 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 103
+#define CODE_VERSION 104
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -148,9 +150,6 @@ static const uint16_t EEPROMSIZE=1024;
 #endif
 
 enum Modes_t {active,inactive,missing,empty}; // status of misc things
-
-//function prototype
-//void checkPlugboard();
 
 #ifdef SoundBoard
 //AltSoftSerial comes from https://github.com/PaulStoffregen/AltSoftSerial
@@ -241,6 +240,9 @@ static const uint8_t encoderPins[WALZECNT * 2] PROGMEM = {3, 2, 4, 5, 6, 7, 10,1
 volatile uint8_t encoderState[WALZECNT] = {0xff, 0xff, 0xff, 0xff};
 volatile unsigned long encoderChange[WALZECNT] = {0, 0, 0, 0};// When last change happened
 volatile boolean encoderMoved[WALZECNT] = {false, false, false, false};
+
+//used in checkPlugboard to show what is connected or not
+static boolean LEDson=false;
 
 //port that the big red button is on - to reset to factory defaults
 #ifdef PROTOTYPE
@@ -1212,8 +1214,20 @@ void printSettings(){
     Serial.println();
   }
 #endif
-
 } // printSettings
+
+/****************************************************************/
+//Clear the lamp board - leaving the rotors alone
+//used by checkPlugboard and checkSwitch
+void clearLampBoard(){
+  if (LEDson){ // only run if it was turned on by checkPlugboard
+    for (uint8_t i=0;i<26;i++){
+      HT.clearLed(pgm_read_byte(led+i));
+    }
+    HT.sendLed();
+    LEDson=false;
+  }
+}
 
 /****************************************************************/
 //calculate a checksum of a block
@@ -1562,7 +1576,7 @@ void displayString(const char msg[], uint16_t sleep) {
   uint8_t i;
 
   if (standalone)
-    return; // no chip was found earlier, no point waisting time here
+    return; // no chip was found earlier, no point wasting time here
 
   for (i = 0; i < strlen(msg); i++) {
     if (msg[i]>='A' && msg[i]<='Z') HT.setLedNow(pgm_read_byte(led+msg[i]-65));
@@ -1850,7 +1864,7 @@ void checkSwitchPos(){
     return;
   }
 
-  adcval=analogRead(Switch);delay(1);//set internal arduino mux to position "Switch" and wait 1ms for value to stabalize
+  adcval=analogRead(Switch);delay(1);//set internal arduino mux to position "Switch" and wait 1ms for value to stabilize
   adcval=analogRead(Switch); // get the value
 
   if (adcval<SwitchPos1){
@@ -1896,6 +1910,8 @@ void checkSwitchPos(){
     Serial.print(F("Machine mode: "));
     Serial.println(newModeTxt);
 
+    checkPlugboard(); // possible turn off the LEDs
+    
     //Sanity check, if model changed the UKW/Walze/ETW may no longer be valid
     //Check done here since at this point the model is set
     //If done in checkWalze you would lose your config if you go from M4 to M3 and back to M4
@@ -2067,12 +2083,11 @@ void setup() {
       }
     }
   }
-
   
   if (standalone){
     Serial.println(F("No IC detected,assuming standalone"));
     plugboardPresent=false;
-    resetLevel=-1;//disable the reset button    
+    resetLevel=-1;//disable the reset button
 #ifdef SoundBoard
     sound_active=missing; //assume no soundboard
   } else {
@@ -2919,8 +2934,7 @@ boolean checkWalzes() {
 // update the plugboard array with what plugs that are connected
 
 void checkPlugboard() {
-  //  uint8_t plug,bitt,mcp,port,i,plug2;
-  uint8_t plug,i,plug2,valA[4];
+  uint8_t plug,i,plugged,valA[4];
   uint16_t val;
   letters_t newplugboard;
   letters_t plugs;
@@ -2964,9 +2978,14 @@ void checkPlugboard() {
   }
 
   plugboardEmpty=true; // signal that nothing is plugged in
+  plugged=0;
+  
+  if (operationMode!=model){
+    clearLampBoard();
+  }
 
   for (plug=0;plug<sizeof(settings.plugboard);plug++){
-
+    
     //make port "plug" output
     i2c_write2(pbLookup[plug][0],IODIRA+pbLookup[plug][1],0xff ^ (1<<pbLookup[plug][2]));
     //set  port "plug" low
@@ -2987,6 +3006,7 @@ void checkPlugboard() {
       if (bitRead(valA[(pbLookup[i][0]-mcp_address)*2+pbLookup[i][1]],pbLookup[i][2])==0){
 	plugs.letter[plug]=i; // that plug is connected to 'i'
 	plugboardEmpty=false; // something is plugged in
+        plugged++;
       }
     }
     
@@ -3002,8 +3022,11 @@ void checkPlugboard() {
     newplugboard.letter[pgm_read_byte(steckerbrett+i)-'A']=pgm_read_byte(&steckerbrett[0]+plugs.letter[i])-'A';
   }
 
-  if (plugboardEmpty==true && settings.plugboardMode != physicalpb) 
-    return;
+  if (plugboardEmpty==true){
+    clearLampBoard();
+    if (settings.plugboardMode != physicalpb)
+      return;
+  }
 
   // If anything is plugged in on the physical plugboard it overrides any virtual config
   settings.plugboardMode=physicalpb;
@@ -3041,9 +3064,9 @@ void checkPlugboard() {
 	//save ch_in and ch_out
       }
     }
-  }
+  
 #endif
-
+    
     if (settings.plugboardMode==config) // if we were in config mode, move on to virtual plugboard before saving it
       settings.plugboardMode=virtualpb;
     saveSettings(0);
@@ -3053,7 +3076,18 @@ void checkPlugboard() {
       Serial.println();
       delay(200); // mostly to debounce the plug connection
     }
-  }
+    if (operationMode==model){
+      if (plugged==2){ // only two plugged in and in "model" mode which is test mode - light up the corresponding LEDs
+        LEDson=true;
+        for (i = 0; i < sizeof(settings.plugboard); i++) {
+          if (settings.plugboard.letter[i] > i) {
+            HT.setLed(pgm_read_byte(led+i));
+            HT.setLedNow(pgm_read_byte(led+settings.plugboard.letter[i]));
+          }
+        }
+      }
+    } // if operationMode==model
+  } // if something changed
 } // checkPlugboard
 
 //debug doublestep
@@ -4145,7 +4179,7 @@ int freeRam ()
       if (checkWalzes() || HT.keysPressed()!=0){ // rotor(s) were changed
 	displayWalzes();
       }
-      if (logLevel>1)
+      if (logLevel>1 || operationMode==model)
       	checkPlugboard();
     } // if ! standalone
   }
@@ -4316,7 +4350,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V103",0);
+	  displayString("V104",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

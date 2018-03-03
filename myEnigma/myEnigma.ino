@@ -42,6 +42,7 @@
  *  v1.02 - New PCB has correct pinorder for encoder 0
  *  v1.03 - Fixed clock mode sound mute bug
  *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
+ *  v1.05 - Ignore non digits when entering time.
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -109,7 +110,7 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 104
+#define CODE_VERSION 105
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -3877,6 +3878,21 @@ void parseCommand() {
       minute = bcd2dec(i2c_read(DS3231_ADDR,1));
       second = bcd2dec(i2c_read(DS3231_ADDR,0));
 
+/*
+ // 29356->30376 = 1020 bytes for this code
+      val.replace(" ","");
+      val.replace("/","");
+      val.replace(":","");
+      val.replace("-","");
+*/
+ // 29356->29546 = 190 bytes
+      for(pos=0;pos<val.length();pos++){
+        if (!isDigit(val.charAt(pos))){
+                val.remove(pos,1);
+        }
+      }
+//      Serial.println(val);
+
       switch (val.length()) {
       case 0:
           break;
@@ -3914,7 +3930,8 @@ void parseCommand() {
           second = val.substring(12,14).toInt();
           break;
       default:
-          Serial.println(F("ERROR: invalid time/date"));
+          Serial.println(F("ERROR: invalid time/date valid format is:"));
+          Serial.println(F("!TIME:YYYYMMDDHHMMSS"));
           break;
       }
 
@@ -4350,7 +4367,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V104",0);
+	  displayString("V105",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

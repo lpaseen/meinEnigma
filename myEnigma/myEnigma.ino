@@ -43,6 +43,7 @@
  *  v1.03 - Fixed clock mode sound mute bug
  *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
  *  v1.05 - Ignore non digits when entering time.
+ *  v1.06 - checkPlugboard: added a short delay after dropping a pin to allow an externa UHR box to detect it
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -110,7 +111,7 @@
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 105
+#define CODE_VERSION 106
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -1005,6 +1006,51 @@ char normalize(char ch){
   while (ch>=letterCnt){ch-=letterCnt;}
   return ch;
 }
+
+/****************************************************************/
+///
+/// print a 8bit hex number with leading 0
+///
+void printHex2(uint8_t val) {
+  if (val < 0x10) {
+    Serial.print(F("0"));
+  };
+  Serial.print(val, HEX);
+} //printHex2
+
+/****************************************************************/
+///
+/// print a 16bit hex number with leading 0
+///
+void printHex4(uint16_t val) {
+  printHex2(val >> 8 & 0xFF);
+  printHex2(val & 0xFF);
+} //printHex4
+
+/****************************************************************/
+///
+/// print a 8bit binary number with leading 0 and space at 8 bits.
+///
+void printBin8(uint8_t val) {
+  int8_t bitno;
+  for (bitno = 7; bitno >= 0; bitno--) {
+    if (bitRead(val, bitno)) {
+      Serial.print(F("1"));
+    } else {
+      Serial.print(F("0"));
+    }
+  }
+  Serial.print(F(" "));
+} //printBin8
+
+/****************************************************************/
+///
+/// print a 16bit binary number with leading 0 and space at 8 bits.
+///
+void printBin16(uint16_t val) {
+  printBin8(val >> 8 & 0xFF);
+  printBin8(val & 0xFF);
+} //printBin16
 
 /****************************************************************/
 void printValError(String val){
@@ -2991,7 +3037,9 @@ void checkPlugboard() {
     i2c_write2(pbLookup[plug][0],IODIRA+pbLookup[plug][1],0xff ^ (1<<pbLookup[plug][2]));
     //set  port "plug" low
     i2c_write2(pbLookup[plug][0],GPIOA+pbLookup[plug][1],0xff ^ (1<<pbLookup[plug][2]));
-
+    
+    delay(10); // give UHR a chance to detect it
+    
     //get all values back
     val=i2c_read2(mcp_address,GPIOA);
     valA[0]=val & 0xFF;
@@ -3000,6 +3048,7 @@ void checkPlugboard() {
     val=i2c_read2(mcp_address+1,GPIOA);
     valA[2]=val & 0xFF;
     valA[3]=val >> 8;
+
     //if any one is low we have a connection
     for (i=0;i<26;i++){ // sizeof(pbLookup)/sizeof(pbLookup[0])
       if (i==plug)
@@ -3014,9 +3063,11 @@ void checkPlugboard() {
     //make the port input again
     //i2c_write2(mcp,GPIOA+port,0xff);
     //i2c_write2(mcp,IODIRA+port,0xff);
-    i2c_write2(pbLookup[plug][0],GPIOA+pbLookup[plug][1],0xff);
-    i2c_write2(pbLookup[plug][0],IODIRA+pbLookup[plug][1],0xff);
+    //i2c_write2(pbLookup[plug][0],GPIOA+pbLookup[plug][1],0xff);
+    i2c_write2(pbLookup[plug][0], IODIRA+pbLookup[plug][1],0xff);
+    i2c_write2(pbLookup[plug][0], GPPUA + pbLookup[plug][1], 0xff); // enable pullup
   } // for plug
+
   
   //transpose the plugboard to real letters
   for (i = 0; i < sizeof(newplugboard.letter); i++) {
@@ -4367,7 +4418,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V105",0);
+	  displayString("V106",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

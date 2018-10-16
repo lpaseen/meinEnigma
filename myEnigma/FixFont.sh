@@ -5,6 +5,9 @@
 # send to stdout
 # flip some bits on it's way
 #
+# The intent is to fix the fontpart due to the different pinout of PSC05-11SRWA and PSC05-12SRWA
+# If changing alnum type the pcb also need to change so it's not just in software it changes
+#
 
 echo "Reading stdin, sending to stdout" 1>&2
 

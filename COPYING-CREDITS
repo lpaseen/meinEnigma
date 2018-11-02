@@ -1,0 +1,28 @@
+﻿Licenses
+--------
+
+meinEnigma is copyrighted (C) 2016-2018 by Peter Sjoberg <peters-enigma AT techwiz DOT ca>.
+
+meinEnigma is Open Source software, made available under the 
+GNU General Public License (GPL) version 3. See the included LICENSE file.
+
+The ht16k33 v1.3 library is used as part of meinEngima and it also is released under the
+GNU General Public License (GPL) version 3.
+Copyright (c) 2016-2018  Peter Sjoberg <peters-alib AT techwiz.ca>
+
+The following files are distributed with meinEnigma and used
+by meinEnigma, but written by others and are NOT licensed under the GPL:
+
+The "An Alternative Software Serial Library V1.2":
+http://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
+Copyright (c) 2014 PJRC.COM, LLC, Paul Stoffregen, paul@pjrc.com
+The license is MIT-like, but see the files for the exact license. 
+
+Arduino Nano Ascii Art attritubion (Used in Source Code and documentation)
+CC-BY cite: http://busyducks.com/ascii-art-arduinos
+
+The documentation for meinEngima is released as:
+
+Attribution NonCommercial NoDerivatives 4.0 International (CC BY-NC-ND 4.0)
+
+

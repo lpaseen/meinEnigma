@@ -1,0 +1,30 @@
+/home/frankk/mEnigma/source/meinEnigma/LampAndKeyboardtest/LampAndKeyboardtest.ino:33: warning: documented symbol `const byte led' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:234: warning: documented symbol `static const uint8_t encoderPins' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:304: warning: documented symbol `const char etw0' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:305: warning: documented symbol `const char etwKBD' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:306: warning: documented symbol `const char etwJAP' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:311: warning: documented symbol `const char *const ETW' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:322: warning: documented symbol `const char ukwA' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:323: warning: documented symbol `const char ukwB' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:324: warning: documented symbol `const char ukwC' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:325: warning: documented symbol `const char ukwBt' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:326: warning: documented symbol `const char ukwCt' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:355: warning: documented symbol `const char *const UKW' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:376: warning: documented symbol `const char walze0' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:377: warning: documented symbol `const char walzeI' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:378: warning: documented symbol `const char walzeII' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:379: warning: documented symbol `const char walzeIII' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:380: warning: documented symbol `const char walzeIV' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:381: warning: documented symbol `const char walzeV' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:382: warning: documented symbol `const char walzeVI' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:383: warning: documented symbol `const char walzeVII' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:384: warning: documented symbol `const char walzeVIII' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:385: warning: documented symbol `const char walzeBeta' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:386: warning: documented symbol `const char walzeGamma' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:425: warning: documented symbol `const char *const WALZE' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:469: warning: documented symbol `const char APICMDLIST' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:594: warning: documented symbol `const enigmaModels_t EnigmaModels' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:756: warning: documented symbol `const char scancodes' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:771: warning: documented symbol `const byte led' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:817: warning: documented symbol `const byte steckerbrett' was not declared or defined.
+/home/frankk/mEnigma/source/meinEnigma/myEnigma/myEnigma.ino:824: warning: documented symbol `static const uint8_t dp' was not declared or defined.

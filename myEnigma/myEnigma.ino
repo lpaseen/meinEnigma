@@ -44,6 +44,8 @@
  *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
  *  v1.05 - Ignore non digits when entering time.
  *  v1.06 - checkPlugboard: added a short delay after dropping a pin to allow an externa UHR box to detect it
+ *  V1.061 - Previous commit added ascii art for nano
+ *      62 - saving 32 bytes by moving double initialization code in to a for loop, tested with print code
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -2069,22 +2071,18 @@ void setup() {
 
   if (Wire.endTransmission()==0){
     Serial.println(F("Preparing plugboard"));
-    // Setup the port multipler
-    i2c_write2(mcp_address,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
-    i2c_write2(mcp_address,IODIRA,0xff); // Set all ports to inputs
-    i2c_write2(mcp_address,IODIRB,0xff); // Set all ports to inputs
-    i2c_write2(mcp_address,GPPUA,0xff);  // enable pullup, seems to sometimes be false readings otherwise and guessing to slow on pullup
-    i2c_write2(mcp_address,GPPUB,0xff);  //
-
-    //The other chip
-    i2c_write2(mcp_address+1,IOCON,0b00011110);   // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
-    i2c_write2(mcp_address+1,IODIRA,0xff); // Set all ports to inputs
-    i2c_write2(mcp_address+1,IODIRB,0xff); // Set all ports to inputs
-    //  i2c_write2(mcp_address+1,GPPUA,0); // disable pullup (for now,to save power)
-    //  i2c_write2(mcp_address+1,GPPUB,0); //
-    i2c_write2(mcp_address+1,GPPUA,0xff);  // enable pullup, seems to sometimes be a problem otherwise
-    i2c_write2(mcp_address+1,GPPUB,0xff);  //
+    // Setup the 2 port multiplers one at addr+0 and the second at addr+1
     plugboardPresent=true;
+    for (i=0;i<2;i++){
+      i2c_write2(mcp_address+i,IOCON,0b00011110);   
+      // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
+      i2c_write2(mcp_address+i,IODIRA,0xff); // Set all ports to inputs
+      i2c_write2(mcp_address+i,IODIRB,0xff); // Set all ports to inputs
+      //  i2c_write2(mcp_address+i,GPPUA,0); // disable pullup (for now,to save power)
+      //  i2c_write2(mcp_address+i,GPPUB,0); //
+      i2c_write2(mcp_address+i,GPPUA,0xff);  // enable pullup, seems to sometimes be a problem otherwise
+      i2c_write2(mcp_address+i,GPPUB,0xff);  //
+      }
   }else{
     Serial.println(F("No plugboard found"));
     plugboardPresent=false;

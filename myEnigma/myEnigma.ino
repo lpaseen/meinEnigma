@@ -95,20 +95,20 @@
  *
  *
  *
- * Arduino Nano V3.0 (or clone) with ATmega328 (32KB Flash Memory - 2KB bootloader) 
+ * Arduino Nano V3.0 (or clone) with ATmega328 (32KB Flash Memory - 2KB bootloader)
  * 
- * PWM pins:3,5,6,9,10,11 
- * Port assignment: 
- *   d0/d1 - Serial port 
- *   d2,3,4,5,6,7 encoder 
- *   d8,9 - SOUNDBOARD io - hardwired, can't be changed 
- *   d10,11 encoder 
- *   d12 - SOUNDBOARD busy 
- *   d13 - buzzer  
- *   a0,1,2,3 - decimal point 
- *   a4,5 i2c 
- *   a6 - Big Red Button - BRB  
- *   a7 - Mode Switch 
+ * PWM pins:3,5,6,9,10,11
+ * Port assignment:
+ *   d0/d1 - Serial port
+ *   d2,3,4,5,6,7 rotor encoder
+ *   d8,9 - SOUNDBOARD io - hardwired, can't be changed
+ *   d10,11 rotor encoder
+ *   d12 - SOUNDBOARD busy
+ *   d13 - buzzer
+ *   a0,1,2,3 - decimal point
+ *   a4,5 i2c
+ *   a6 - Big Red Button - BRB
+ *   a7 - Mode Switch
  * All Arduino pins are used! 
  *
                                     +-----+
@@ -197,26 +197,24 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 //
 
 //#define DEBUG
-//#define DEBUGAPI     //debug API?
+//#define DEBUGAPI     //debug of cli parsing
 //#define DEBUGCSUM    //debug Check Sum - EEPROM settings not FIRMWARE
-//#define DEBUGDS      //debug DoubleStep
-//#define DEBUGDUP     //Local helper function
-                       //Return true if any dup is found
-//#define DEBUGR       //debug Rotor?
+//#define DEBUGCR      //do a final verification of the encrypted letter
+//#define DEBUGDS      //debug rotor DoubleStep issue
+//#define DEBUGDUP     //debug check of dup plug pairs/letters
 //#define DEBUGRS      //debug Rotor Settings
-//#define DEBUGVR      // Debug ValidRotors
-//#define DEBUGWL      // was Debug wheel not implmented
-//#define PSDEBUG      // Debug Free Mem 
-//#define TESTCRYPTO 6 // test enigma encryption
-                       // 4 = Rotor?
-                       // 5 = Grand Finale
-                       // 6 = speed test
-//#define TEST 1 // basic M4 AAAA test
-//#define TEST 2 // M4 plugboard
-//#define TEST 3 // M4, ring, doublestep
-//#define TEST 4 // M3, ringstellung
+//#define DEBUGVR      //debug Rotor validation
+//#define DEBUGWL      //debug display of letters on "wheels"
+//#define DEBUGRAM     // Debug Free Mem
 
-//#define undef        // sets logvel to 2????
+// TESTCRYPTO  test enigma encryption at different levels, this disables all normal enigma functions
+//#define TESTCRYPTO 1 // = basic M4 AAAA test
+//#define TESTCRYPTO 2 // = M4 plugboard
+//#define TESTCRYPTO 3 // = M4, ring, doublestep
+//#define TESTCRYPTO 4 // = M3, ringstellung
+//#define TESTCRYPTO 5 // = Grand Finale
+//#define TESTCRYPTO 6 // = speed test
+//#define DEBUGCRYPT   // Debug crypto, print out the path of a letter
 
 
 //ht16k33 comes from https://github.com/lpaseen/ht16k33
@@ -1664,6 +1662,8 @@ uint8_t dec2bcd(uint8_t dec){
 } //bcd2dec
 #endif
 
+
+//debug display of letters on "wheels"
 //#define DEBUGWL
 /****************************************************************/
 // display something on one of the "wheels"
@@ -2083,7 +2083,7 @@ void loadDefaults(){
 void eraseEEPROM(){
   uint16_t i;
 #ifdef ESP8266
-//PSDEBUG
+//Need to be filled in
 
 #else
   for (i=0;i<EEPROM.length()-SETTINGSIZE;i++){//Last setting (SETTINGSIZE bytes) are reserved, last 8 are 4 bytes odometer and 4 bytes serial
@@ -2234,7 +2234,6 @@ void setup() {
     }else{
       Serial.println(F(" Found a soundboard, activating it"));
       //  readData(); // read status
-      //PSDEBUG
       //  Serial.println(F("setting vol 20"));
       sendCommand(dfcmd_VOLUME,30);
       //  Serial.println(F("Done with soundboard"));
@@ -2517,6 +2516,7 @@ void updateRingStellung(uint8_t wheelNo,uint8_t prevCurrent){
   } // if at ringstellung
 } // updateRingStellung
 
+//debug Rotor validation
 //#define DEBUGVR
 /****************************************************************/
 //Helper function to find valid rotors
@@ -2593,6 +2593,7 @@ uint8_t getValidRotors(uint8_t walzeNo, uint8_t *valid,uint8_t *vcnt){
 //  debounce - if less than x ms since last interrupt
 //
 
+//Debug check of dup plug pairs/letters
 //#define DEBUGDUP
 //Local helper function
 //Return true if any dup is found
@@ -2602,9 +2603,9 @@ boolean p_checkDups(uint8_t pairs[13][2]){
   
   used[0]='\0'; // Zero the string
 #ifdef DEBUGDUP
-  Serial.println();//PSDEBUG
-  for (i=0;i<13;i++){Serial.print((char)pairs[i][0]);Serial.print((char)pairs[i][1]);Serial.print(F(" "));}//PSDEBUG
-  Serial.println();//PSDEBUG
+  Serial.println();
+  for (i=0;i<13;i++){Serial.print((char)pairs[i][0]);Serial.print((char)pairs[i][1]);Serial.print(F(" "));}
+  Serial.println();
 #endif
   for (i=0;i<13;i++){
     if (pairs[i][0]==' ' && pairs[i][1]==' ')
@@ -2632,7 +2633,7 @@ boolean p_checkDups(uint8_t pairs[13][2]){
     used[len+1] = pairs[i][1];
     used[len]   = pairs[i][0];
 #ifdef DEBUGDUP
-    Serial.println(used);//PSDEBUG
+    Serial.println(used);
 #endif
   }
   return false;
@@ -2755,11 +2756,11 @@ boolean checkWalzes() {
 		    pbpairs[x][1]=settings.plugboard.letter[i]+'A';
 		    x++;
 #ifdef DEBUGDUP
-		    Serial.print(x-1);Serial.print(F(" "));Serial.print(pbpairs[x-1][0],DEC);Serial.print(F(" "));Serial.println(pbpairs[x-1][1],DEC);//PSDEBUG
+		    Serial.print(x-1);Serial.print(F(" "));Serial.print(pbpairs[x-1][0],DEC);Serial.print(F(" "));Serial.println(pbpairs[x-1][1],DEC);
 		    if (x>12){ //should never get here
-		      Serial.print(F("PSDEBUG: - error, too many pairs!!!"));
+		      Serial.print(F("DEBUGDUP: - error, too many pairs!!!"));
 		      break;
-		    }//PSDEBUG
+		    }
 #endif
 		  }//if larger
 		}//for pb
@@ -2803,7 +2804,7 @@ boolean checkWalzes() {
 		    pbpairs[pbpos][walzeNo-2]--;
 		  }
 #ifdef DEBUGDUP
-		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));//PSDEBUG
+		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));
 #endif
 		  x++; //one more dup found
 	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
@@ -2817,7 +2818,7 @@ boolean checkWalzes() {
 		    pbpairs[pbpos][walzeNo-2]++;
 		  }
 #ifdef DEBUGDUP
-		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));//PSDEBUG
+		  Serial.print((char)pbpairs[pbpos][walzeNo-2]);Serial.print(F("<"));
 #endif
 		  x++; //one more dup found
 	        } while (p_checkDups(pbpairs) && x<letterCnt); //if we checked all letters it might be dups since before
@@ -2829,11 +2830,12 @@ boolean checkWalzes() {
 		}
 	      }
 #ifdef DEBUGDUP
-	      for (i = 0; i < 13; i++) {//PSDEBUG
-		Serial.print(i);Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);//PSDEBUG
-	      }//PSDEBUG
+	      for (i = 0; i < 13; i++) {
+		Serial.print(i);Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);
+	      }
 	      Serial.println();
-	      Serial.println();Serial.print(F("PSDEBUG2"));Serial.println();//PSDEBUG
+	      Serial.println();
+              Serial.println(F("DEBUGDUP"));
 #endif
 	      //transform the pbpairs to settings
 	      //First clear the board
@@ -2847,13 +2849,13 @@ boolean checkWalzes() {
 		settings.plugboard.letter[pbpairs[i][0]-'A']=pbpairs[i][1]-'A';
 		settings.plugboard.letter[pbpairs[i][1]-'A']=pbpairs[i][0]-'A';
 #ifdef DEBUGDUP
-		Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);//PSDEBUG
-		//Serial.print(i);Serial.print(F(" "));Serial.print(pbpairs[i][0]-'A');Serial.print(F(" "));Serial.println(pbpairs[i][1]-'A');//PSDEBUG
+		Serial.print((char)pbpairs[i][0]);Serial.print(F(" "));Serial.println((char)pbpairs[i][1]);
+		//Serial.print(i);Serial.print(F(" "));Serial.print(pbpairs[i][0]-'A');Serial.print(F(" "));Serial.println(pbpairs[i][1]-'A');
 #endif
 	      }
 #ifdef DEBUGDUP
-	      printPlugboard();//PSDEBUG
-	      Serial.println();//PSDEBUG
+	      printPlugboard();
+	      Serial.println();
 #endif
 	    } // if walze==2 or 3
 
@@ -3019,7 +3021,7 @@ boolean checkWalzes() {
 	    if (minute>59)
 	      minute=59;
 
-	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC);  //PSDEBUG
+	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC); //PSDEBUG
 	    hour=dec2bcd(hour);
 	    minute=dec2bcd(minute);
 	    //	    Serial.print(F(" - HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.println(minute,HEX);Serial.println(); //PSDEBUG
@@ -3609,8 +3611,8 @@ char encrypt(char ch){
 
   odometer++; // one more letter encrypted...
 
-#ifdef PSDEBUG
-  //PSDEBUG - final check that shouldn't fail
+#ifdef DEBUGCR
+  // final check that shouldn't fail
   if (ch>26 || ch<0){
     Serial.println();
     Serial.print(F(" ENCRYPT ERROR: "));
@@ -4076,11 +4078,10 @@ void parseCommand() {
           i2c_write2(DS3231_ADDR, 0, dec2bcd(second));
       }
 
-      //      Serial.print(F("PSDEBUG: "));Serial.print(hour,DEC);Serial.print(F(" "));Serial.print(minute,DEC);Serial.print(F(" "));Serial.println(second,DEC);
+      //      Serial.print(F("DEBUG-TIME: "));Serial.print(hour,DEC);Serial.print(F(" "));Serial.print(minute,DEC);Serial.print(F(" "));Serial.println(second,DEC);
       Serial.print(F("%TIME:"));
       printTime();
       Serial.println();
-      //PSDEBUG
       //      Serial.print(i2c_read(DS3231_ADDR,2),HEX);Serial.print(F(" "));Serial.print(i2c_read(DS3231_ADDR,1),HEX);Serial.print(F(" "));Serial.println(i2c_read(DS3231_ADDR,0),HEX);
 #endif
 #ifdef NOMEMLIMIT
@@ -4186,7 +4187,7 @@ void loop() {
   uint16_t hourminute;
 #endif
 
-#ifdef PSDEBUG
+#ifdef DEBUGRAM
 /****************************************************************/
 // from https://learn.adafruit.com/memories-of-an-arduino/measuring-free-memory
 int freeRam () 
@@ -4195,7 +4196,7 @@ int freeRam ()
   int v; 
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
-  //PSDEBUG
+
   freeNow=freeRam();
   if (freeNow != prevFreeRam){
     Serial.print(F("Free ram = "));
@@ -4670,10 +4671,10 @@ void loop() {
   Serial.println();
   operationMode=run;
   
-  //#define TEST 1 // basic M4 AAAA test
-  //#define TEST 2 // M4 plugboard
-  //#define TEST 3 // M4, ring, doublestep
-  //#define TEST 4 // M3, ringstellung
+  //#define TESTCRYPTO 1 // basic M4 AAAA test
+  //#define TESTCRYPTO 2 // M4 plugboard
+  //#define TESTCRYPTO 3 // M4, ring, doublestep
+  //#define TESTCRYPTO 4 // M3, ringstellung
 
   //javascript sim: https://people.physik.hu-berlin.de/~palloks/js/enigma/enigma-u_v20_en.html
 
@@ -4716,7 +4717,7 @@ void loop() {
   Serial.println();
   Serial.println();
 
-#ifdef undef
+#ifdef DEBUGCRYPT
   logLevel=2;
   for (i=0;i<1;i++){
 #else
@@ -4747,7 +4748,7 @@ void loop() {
   Serial.println();
   Serial.println();
 
-#ifdef undef
+#ifdef DEBUGCRYPT
   logLevel=2;
   for (i=0;i<1;i++){
 #else

@@ -1,13 +1,15 @@
-//#define TESTCRYPTO 6
 /****************************************************************
- *  MyEnigma
+ *  MyEnigma.ino
+ *
  *  I'm not a programmer and writing this partly to learn 
  *  programming. That means that this code is not optimized and 
  *  several things could be done in a smarter way - I just don't 
  *  know about them (yet).
  *  If it bugs you - fix it and tell me about it, that's the way I learn.
  *
- *  Copyright: Peter Sjoberg <peters-enigma AT techwiz DOT ca>+
+ *  Copyright: (c) 2016-2018 Peter Sjoberg <peters-enigma AT techwiz DOT ca>
+ *  http://www.meinengima.com
+ *
  *  License: GPLv3
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License version 3 as 
@@ -46,6 +48,8 @@
  *  v1.06 - checkPlugboard: added a short delay after dropping a pin to allow an externa UHR box to detect it
  *  V1.061 - Previous commit added ascii art for nano
  *      62 - saving 32 bytes by moving double initialization code in to a for loop, tested with print code
+ *  v1.07w - working verision for proposed code merges from FK Version is 999 in code so it doesn't ship
+ *           - tmp recording minor changes
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -91,29 +95,69 @@
  *
  *
  *
- *PWM pins:3,5,6,9,10,11
- *Port assignment:
- * d0/d1 - Serial port
- * d2,3,4,5,6,7 encoder
- * d8,9 - soundboard io - hardwired, can't be changed
- * d10,11 encoder
- * d12 - soundboard busy
- * d13 - buzzer 
- * a0,1,2,3 - decimal point
- * a4,5 i2c
- if prototype
- * a6 - switch
- * a7 - big red button 
- else
- * a6 - big red button 
- * a7 - switch
- * All pins used!
+ * Arduino Nano V3.0 (or clone) with ATmega328 (32KB Flash Memory - 2KB bootloader) 
+ * 
+ * PWM pins:3,5,6,9,10,11 
+ * Port assignment: 
+ *   d0/d1 - Serial port 
+ *   d2,3,4,5,6,7 encoder 
+ *   d8,9 - SOUNDBOARD io - hardwired, can't be changed 
+ *   d10,11 encoder 
+ *   d12 - SOUNDBOARD busy 
+ *   d13 - buzzer  
+ *   a0,1,2,3 - decimal point 
+ *   a4,5 i2c 
+ *   a6 - Big Red Button - BRB  
+ *   a7 - Mode Switch 
+ * All Arduino pins are used! 
  *
+                                    +-----+
+                       +------------| USB |------------+
+                       |            +-----+            |
+Buzzer/Arduino LED B5  | [ ]D13/SCK        MISO/D12[ ] |   B4 Sound Board BUSY
+                       |                               |
+                       | [ ]3.3V           MOSI/D11[ ]~|   B3 Rotor 3
+                       |                               |
+                       | [ ]V.ref     ___    SS/D10[ ]~|   B2 Rotor 3
+                       |                               |
+Decimal Pt0       C0   | [ ]A0       / N \       D9[ ]~|   B1 SOUNDBOARD D1
+                       |                               |
+Decimal Pt1       C1   | [ ]A1      /  A  \      D8[ ] |   B0 SOUNDBOARD D0
+                       |                               |
+Decimal Pt2       C2   | [ ]A2      \  N  /      D7[ ] |   D7 Rotor 2
+                       |                               |
+Decimal Pt3       C3   | [ ]A3       \_0_/       D6[ ]~|   D6 Rotor 2
+                       |                               |
+i2C SDA           C4   | [ ]A4/SDA               D5[ ]~|   D5 Rotor 1
+                       |                               |
+i2C SCL           C5   | [ ]A5/SCL               D4[ ] |   D4 Rotor 1
+                       |                               |
+Big Red Button         | [ ]A6              INT1/D3[ ]~|   D3 Rotor 0
+                       |                               |
+Mode Switch            | [ ]A7              INT0/D2[ ] |   D2 Rotor 0
+                       |                               |
+                       | [ ]5V                  GND[ ] | 
+                       |                               | 
+                  C6   | [ ]RST                 RST[ ] |   C6
+                       |                               |
+                       | [ ]GND   5V MOSI GND   TX1[ ] |   D0 (Serial Port)
+                       |                               |
+                       | [ ]Vin   [ ] [ ] [ ]   RX1[ ] |   D1 (Serial Port)
+                       |                               |
+                       |          [ ] [ ] [ ]          |
+                       |                               |
+                       |          MISO SCK RST         |
+                       | NANO-V3.0                     |
+                       |                               |
+                       +-------------------------------+
+
+CC-BY cite: http://busyducks.com/ascii-art-arduinos        
 */
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 106
+//#define CODE_VERSION 106
+#define CODE_VERSION 999 // WORK/TEST version
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -131,10 +175,48 @@
 //Include code for the RTC size:27716-26784=932
 #define CLOCK
 
+// If running on some FUTURE EXPANSION version with way more memory
+// but a lot of this code is UNTESTED
+// Current limit is 32KB CODE SIZE - 2KB BOOTLOADER
 
-//If running on some future version with way more memory
-//but a lot of this code is not tested
 //#define NOMEMLIMIT
+
+// Will allow German Language Version which could be ifdef'ed in
+// Will allow UHR add-on
+// Will allow additional Models
+
+// ############################## meinEnigma LOGLEVEL DEFINES
+//Log level on serial port
+//0 = all off, only message
+//1 = some info as the letter traveling
+//2 = debug code
+
+// ############################## meinEnigma DEBUG DEFINES
+
+// These are here for documentation purposes. It is recommended to change in the area where they are used.
+//
+
+//#define DEBUG
+//#define DEBUGAPI     //debug API?
+//#define DEBUGCSUM    //debug Check Sum - EEPROM settings not FIRMWARE
+//#define DEBUGDS      //debug DoubleStep
+//#define DEBUGDUP     //Local helper function
+                       //Return true if any dup is found
+//#define DEBUGR       //debug Rotor?
+//#define DEBUGRS      //debug Rotor Settings
+//#define DEBUGVR      // Debug ValidRotors
+//#define DEBUGWL      // was Debug wheel not implmented
+//#define PSDEBUG      // Debug Free Mem 
+//#define TESTCRYPTO 6 // test enigma encryption
+                       // 4 = Rotor?
+                       // 5 = Grand Finale
+                       // 6 = speed test
+//#define TEST 1 // basic M4 AAAA test
+//#define TEST 2 // M4 plugboard
+//#define TEST 3 // M4, ring, doublestep
+//#define TEST 4 // M3, ringstellung
+
+//#define undef        // sets logvel to 2????
 
 
 //ht16k33 comes from https://github.com/lpaseen/ht16k33
@@ -4416,7 +4498,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V106",0);
+	  displayString("V999",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

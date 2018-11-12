@@ -3306,7 +3306,8 @@ void rotateWheel(){
 
 } // rotateWheel
 
-//#define DEBUGR
+//debug Rotor Settings
+//#define DEBUGRS
 /****************************************************************/
 char encrypt(char ch){
 
@@ -3522,7 +3523,7 @@ char encrypt(char ch){
     Serial.print(F("  :"));
   }
 
-#ifdef DEBUGR
+#ifdef DEBUGRS
   Serial.println();
 #endif
 
@@ -4503,9 +4504,7 @@ int freeRam ()
 	  sound2play=1006;
 	  break;
 	}
-	if (sound_active==active){
-	  playSound(sound2play);
-	}
+        playSound(sound2play);
         if (settings.tts)
            playSound(1501+(byte)ench-'A'); // A=1501, B=1502...
 #endif

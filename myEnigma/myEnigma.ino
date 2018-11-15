@@ -159,7 +159,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
 //#define CODE_VERSION 106
-#define CODE_VERSION 999 // WORK/TEST version
+#define CODE_VERSION 107   // WORK/TEST version
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -4502,7 +4502,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V999",0);
+	  displayString("V107",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

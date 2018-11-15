@@ -46,10 +46,12 @@
  *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
  *  v1.05 - Ignore non digits when entering time.
  *  v1.06 - checkPlugboard: added a short delay after dropping a pin to allow an externa UHR box to detect it
- *  V1.061 - Previous commit added ascii art for nano
- *      62 - saving 32 bytes by moving double initialization code in to a for loop, tested with print code
- *  v1.07w - working verision for proposed code merges from FK Version is 999 in code so it doesn't ship
- *           - tmp recording minor changes
+ *  v1.07w - Added ascii art for nano
+ *         - Better documentation around DEBUG options
+ *         - Code optimization - cleaned up redundant code and changed order of things
+ *         - 
+ *         - 
+ *         - (TO BE DONE AND TESTED: added code for arduino enigma external lamp board)
  *
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -4541,6 +4543,7 @@ int freeRam ()
 	ench=encrypt(pgm_read_byte(&scancodes[0]+key-1));
 	Serial.print(ench);
 	ledOn=pgm_read_byte(led+ench-'A');
+	HT.setLedNow(ledOn);
 #ifdef SoundBoard
 	//should probably assign different part of they keyboard to different sound
 	//for example left keys on bottom row has 1001, right keys has 1002 and so on
@@ -4593,7 +4596,6 @@ int freeRam ()
 	  Serial.print(F("  turning on LED: "));
 	  Serial.println(ledOn);
 	}
-	HT.setLedNow(ledOn);
 	if (settings.morseCode)
 	  sendLetter(ench);
       }

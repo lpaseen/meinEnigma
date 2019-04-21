@@ -7,7 +7,7 @@
  *  know about them (yet).
  *  If it bugs you - fix it and tell me about it, that's the way I learn.
  *
- *  Copyright: (c) 2016-2018 Peter Sjoberg <peters-enigma AT techwiz DOT ca>
+ *  Copyright: (c) 2016-2019 Peter Sjoberg <peters-enigma AT techwiz DOT ca>
  *  http://www.meinengima.com
  *
  *  License: GPLv3
@@ -46,13 +46,11 @@
  *  v1.04 - Added test mode for plugboard, in mode==Model - plug in a physical cable and the lampboard lights up
  *  v1.05 - Ignore non digits when entering time.
  *  v1.06 - checkPlugboard: added a short delay after dropping a pin to allow an externa UHR box to detect it
- *  v1.07w - Added ascii art for nano
+ *  v1.07 - Added ascii art for nano
  *         - Better documentation around DEBUG options
  *         - Code optimization - cleaned up redundant code and changed order of things
- *         - 
- *         - 
- *         - (TO BE DONE AND TESTED: added code for arduino enigma external lamp board)
- *
+ *  v1.08 - Fixed so it compiles if CLOCK is disabled also
+
  *
  * TODO/Shortcomings (all due to lack of program space):
  *   No UKWD
@@ -71,7 +69,7 @@
  *   The are numbered 0-1-2-3 so walze/wheel/rotor 0 is that extra thin wheel the navy got.
  *   currentWalze always includes ring settings, only place it's adjusted for is in encryption.
  *   eeprom management is simplified. 
- *    Drop the movement of save location and have it all at fixed positions. We still have 100000 saves guaranteed.
+ *    Droped the movement of save location and have it all at fixed positions. We still have 100000 saves guaranteed.
  *    Currently the array is 51 bytes and that would give at most 20 locations but by going
  *      with 15 locations of 64 bytes each we can easier change the content at a 
  *      later firmware revision and the code gets simpler at the cost of 4 presets.
@@ -99,7 +97,6 @@
  *
  * Arduino Nano V3.0 (or clone) with ATmega328 (32KB Flash Memory - 2KB bootloader)
  * 
- * PWM pins:3,5,6,9,10,11
  * Port assignment:
  *   d0/d1 - Serial port
  *   d2,3,4,5,6,7 rotor encoder
@@ -158,8 +155,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-//#define CODE_VERSION 106
-#define CODE_VERSION 107   // WORK/TEST version
+#define CODE_VERSION 108  // WORK/TEST version
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -195,7 +191,8 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 
 // ############################## meinEnigma DEBUG DEFINES
 
-// These are here for documentation purposes. It is recommended to change in the area where they are used.
+// These are here for documentation purposes. It is recommended 
+// to read the code next to where it is used to understand what it does.
 //
 
 //#define DEBUG
@@ -763,7 +760,7 @@ const enigmaModels_t EnigmaModels[] PROGMEM = {
 //  leftmost wheel is 0 and not available on M3
 //
 
-// calc 1+1+1+1+4+1+4+1+26+4+1+2
+// calc 1+1+1+1+4+1+4+1+26+4+1+2 = 47
 //Maximum number of presets
 #define MAXPRESET 15 //end of eeprom is used for odometer and serial number
 //If settingsize is changed firmware upgrade with new format may 
@@ -2694,8 +2691,18 @@ boolean checkWalzes() {
 	  direction = down;
 #ifdef SoundBoard
           //operationMode==model
-          if ((clock_active==active && operationMode==model && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active ){
-	    playSound(1201); // rotor click 1
+#ifdef CLOCK
+          if ( (
+                  clock_active==active && 
+                  operationMode==model && 
+                  (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')
+                ) || 
+                clock_active!=active ){
+#else
+          if (operationMode==model && 
+                (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')){
+#endif
+            playSound(1201); // rotor click 1
 	  }
 #endif
 	  break;
@@ -2708,7 +2715,18 @@ boolean checkWalzes() {
 	  changed = true;
 	  direction = up;
 #ifdef SoundBoard
-          if ((clock_active==active && operationMode==model && (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')) || clock_active!=active){
+#ifdef CLOCK
+          if ( (
+                  clock_active==active && 
+                  operationMode==model && 
+                  (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')
+                ) || 
+                clock_active!=active){
+#else
+          if ( operationMode==model && 
+               (lastKeyCode=='0' || lastKeyCode=='1' || lastKeyCode=='2' || lastKeyCode=='3')
+               ){
+#endif
 	    playSound(1202); // rotor click 2
 	  }
 #endif
@@ -3023,10 +3041,10 @@ boolean checkWalzes() {
 	    if (minute>59)
 	      minute=59;
 
-	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC); //PSDEBUG
+	    //	    Serial.print(F("Decimal time:"));Serial.print(hour,DEC);Serial.print(F(":"));Serial.print(minute,DEC);
 	    hour=dec2bcd(hour);
 	    minute=dec2bcd(minute);
-	    //	    Serial.print(F(" - HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.println(minute,HEX);Serial.println(); //PSDEBUG
+	    //	    Serial.print(F(" - HEX time:"));Serial.print(hour,HEX);Serial.print(F(":"));Serial.println(minute,HEX);Serial.println();
 	    i2c_write2(DS3231_ADDR,2,hour);
 	    i2c_write2(DS3231_ADDR,1,minute);
 	    i2c_write2(DS3231_ADDR,0,0); //seconds
@@ -3192,7 +3210,7 @@ void checkPlugboard() {
     }
     if (pbpos==10){ // if we have 10 plugs "inserted"
       for (i = 0; i<10;i++){
-	//PSDEBUG working here, this logic is not at all complete and is broken
+	//DEBUG working here, this logic is not at all complete and is broken
 	ch_in=pb[i][0];
 	whitside=uhr[normalized(i*4+3,40)];//what level it comes out at
 	ch=keyof(whiteside/4,UHROUT[]);//to be reversed, at what position is ch/4
@@ -4356,7 +4374,7 @@ int freeRam ()
       Serial.println((char)lastKeyCode);
     }
   } else { // no key pressed
-    //PSDEBUG - what is going on here ??? why ==2 and why no =0 ?
+    //TOCHECK - what is going on here ??? why ==2 and why no =0 ?
     if ( cnt == 2 ){
       displayWalzes();
     }
@@ -4397,12 +4415,12 @@ int freeRam ()
 	      Serial.print(F(":"));
 	    }
 	    Serial.println(hourminute & 0xFF,HEX);
-	    //PSDEBUG
+	    //DEBUG
 	    //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
 	    //	  for (i=0;i<4;i++){
 	    //	    Serial.print(F("DEBUG "));Serial.print(i);Serial.print(":");Serial.print((3-i)*4,DEC);Serial.print(F(">"));Serial.println((hourminute>>((3-i)*4) & 0xF),HEX);
 	    //	  }
-	    /* PSDEBUG
+	    /* DEBUG
 	       Serial.print(F("DEBUG :"));
 	       for (i=0;i<0x12;i++){
 	       minute=i2c_read(DS3231_ADDR,i);
@@ -4502,7 +4520,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V107",0);
+	  displayString("V108",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

@@ -50,6 +50,7 @@
  *         - Better documentation around DEBUG options
  *         - Code optimization - cleaned up redundant code and changed order of things
  *  v1.08 - Fixed so it compiles if CLOCK is disabled also
+ *  v1.09 - Fixed DEBUGRAM compile error
 
  *
  * TODO/Shortcomings (all due to lack of program space):
@@ -155,7 +156,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 108  // WORK/TEST version
+#define CODE_VERSION 109  // WORK/TEST version
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -204,7 +205,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 //#define DEBUGRS      //debug Rotor Settings
 //#define DEBUGVR      //debug Rotor validation
 //#define DEBUGWL      //debug display of letters on "wheels"
-//#define DEBUGRAM     // Debug Free Mem
+#define DEBUGRAM     // Debug Free Mem
 
 // TESTCRYPTO  test enigma encryption at different levels, this disables all normal enigma functions
 //#define TESTCRYPTO 1 // = basic M4 AAAA test
@@ -1068,6 +1069,18 @@ void playSound(uint16_t fileno, boolean wait=true) {
 
 #endif
 //endif SoundBoard
+
+
+#ifdef DEBUGRAM
+/****************************************************************/
+// from https://learn.adafruit.com/memories-of-an-arduino/measuring-free-memory
+int freeRam () 
+{
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+#endif
 
 /****************************************************************/
 //Get a single character from a specific wheel and wheel position
@@ -4208,15 +4221,6 @@ void loop() {
 #endif
 
 #ifdef DEBUGRAM
-/****************************************************************/
-// from https://learn.adafruit.com/memories-of-an-arduino/measuring-free-memory
-int freeRam () 
-{
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
-}
-
   freeNow=freeRam();
   if (freeNow != prevFreeRam){
     Serial.print(F("Free ram = "));
@@ -4520,7 +4524,7 @@ int freeRam ()
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V108",0);
+	  displayString("V109",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

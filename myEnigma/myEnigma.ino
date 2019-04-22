@@ -205,7 +205,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 //#define DEBUGRS      //debug Rotor Settings
 //#define DEBUGVR      //debug Rotor validation
 //#define DEBUGWL      //debug display of letters on "wheels"
-#define DEBUGRAM     // Debug Free Mem
+//#define DEBUGRAM     // Debug Free Mem
 
 // TESTCRYPTO  test enigma encryption at different levels, this disables all normal enigma functions
 //#define TESTCRYPTO 1 // = basic M4 AAAA test

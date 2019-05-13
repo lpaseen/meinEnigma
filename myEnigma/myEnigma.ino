@@ -156,7 +156,7 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 
 //Also search for "Show version CODE_VERSION " and change that ("V")
 //value is version * 100 so 123 means v1.23
-#define CODE_VERSION 109  // WORK/TEST version
+#define CODE_VERSION 110  // 1.10 is a work/test version - release will be 1.11
 
 //the prototype has a few things different
 //#define PROTOTYPE
@@ -256,12 +256,12 @@ AltSoftSerial altSerial;
 #define dfcmd_GETSTATE 0x42 // get current status
 #define dfcmd_GETFEEDBACK 0x41 // get feedback from module
 uint8_t msgBuf[10]= { 0X7E, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0XEF};
-static Modes_t sound_active=active; 
+static Modes_t sound_active=missing; 
 #endif
 
 #ifdef CLOCK
 #define DS3231_ADDR 0x68
-static Modes_t clock_active=inactive;
+static Modes_t clock_active=missing;
 #endif
 
 /****************/
@@ -295,6 +295,7 @@ static const uint8_t morsecode[] PROGMEM={
   0b00001011,// Y
   0b00001100,// Z
 };
+
 #define spkPin 13
 //#define SPK // Speaker/Piezo or simple BEEP thingy
 
@@ -331,16 +332,12 @@ static boolean LEDson=false;
 //port that the big red button is on - to reset to factory defaults
 #ifdef PROTOTYPE
 #define RESET 7 ///"BIG RED BUTTON", reset button, actually a7 not d7
+#define Switch 6 ///analog port that the switch is at
 #else
 #define RESET 6 ///"BIG RED BUTTON", reset button, actually a6 not d6
+#define Switch 7 ///analog port that the switch is at
 #endif
 
-///analog port that the switch is at
-#ifdef PROTOTYPE
-#define Switch 6
-#else
-#define Switch 7
-#endif
 ///How many positions the switch has
 #define SwitchPositions 5
 // 5V/((SwitchPositions/1)*SwitchNo)
@@ -594,6 +591,7 @@ static const uint8_t DEBUGPLUG=1;
 #ifdef NOMEMLIMIT
 uint8_t debugMask=0;
 #endif
+
 //enigma models
 // http://www.cryptomuseum.com/crypto/enigma/timeline.htm
 // Year  Army/Air   Navy UKW    Wheels
@@ -623,6 +621,7 @@ typedef enum {
   config,
   nopb
 } vpb_t;
+
 ///
 /// a list of valid enigma models
 ///
@@ -793,7 +792,11 @@ machineSettings_t settings; // current settings and also what is saved in eeprom
 enigmaModels_t EnigmaModel; // attributes for the current enigma model
 boolean plugboardPresent=true;   // whether the plugboard is physical(true) or virtual(false)
 boolean plugboardEmpty=false;    // whether anything is plugged in anywhere
+#ifdef STANDALONE
+boolean standalone=true;	 // If standalone (no hardware, just serialAPI)
+#else
 boolean standalone=false;	 // If standalone (no hardware, just serialAPI)
+#endif
 int8_t  resetLevel=100; 	 // threshold for reset, put as variable to be able to disable it if standalone
 int8_t  currentWalzePos[WALZECNT]; // current position of the wheel, used during config
 
@@ -801,7 +804,7 @@ int8_t lastKey; // last key pressed, needed to pass the info between subroutines
 char   lastKeyCode; // after parsed trough scancode
 uint8_t lastPreset; // last loaded preset
 
-HT16K33 HT;
+HT16K33 HT; // initialize the ht16k33 library/class
 
 //  MCP23017 registers, all as seen from bank0
 //
@@ -852,7 +855,6 @@ const char scancodes[] PROGMEM = "QWERTZUIOASDFPYXCVBNMLGHJK0123";
 #endif
 
 //
-
 //A=65 so the [0] element contain the number of the LED that shows "A"
 //after 'Z'-65 comes control LEDs [\]^_
 //Usage: led['A'-65] or led[char-65]
@@ -887,6 +889,7 @@ const byte led[] PROGMEM = {12, 24, 22, 14,  5, 15, 28, 29, 10, 30, 31, 27, 26, 
 // 25  23  20  17  14  11  08  05  02
 //                                   00000000001111111111222222
 //                                   01234567890123456789012345
+
 #ifdef NUMERICPB
 const byte steckerbrett[] PROGMEM = "IQZHPYGOXFNWEMVDLUCKTBJSAR"; //
 #else
@@ -2112,12 +2115,66 @@ void eraseEEPROM(){
 /****************************************************************/
 void setup() {
   uint8_t i, j, key;
+  uint16_t minute;
   unsigned long ccsum;
+  boolean standalone_expected=standalone;
   char strBuffer[]="PR X";
 
   Serial.begin(38400);
   Serial.print(F("MeinEnigma "));
   printVersion();
+
+  Wire.begin(); // enable the wire lib
+  HT.begin(0x00); // This also clears all leds
+
+  //Check if standalone
+  // real lights are only 0-31 and 64-127 so lets test turning on some lights in 32-63 range
+  // if they stick we probably have a ht16k33 chip there and with that the rest of the enigma
+  // if not it is probably standalone and we need to "disable" things like the switch
+  //  or it will fill the serial port with switch changes, and other things or it will be slow.
+  for (i=34;i<63;i++){
+    if ((i%2)==0)
+      HT.setLed(i);
+    else
+      HT.clearLed(i);
+  }
+  delay(100);
+  HT.sendLed();
+
+  //Clear the ram to make sure we read data but don't send it!
+  for (i=0;i<sizeof(HT.displayRam);i++)
+    HT.displayRam[i]=0;
+
+  standalone=false;//start with assuming it's not standalone
+  for (i=34;i<63;i++){//Verify that they are set correctly, if not assume standalone
+    /*
+    if ((i%2)==0){
+      if (!HT.getLed(i,true)){
+	standalone=true;
+        resetLevel=-1;//disable the reset button
+	break;
+      }
+    } else {
+      if (HT.getLed(i,true)){
+	standalone=true;
+        resetLevel=-1;//disable the reset button
+	break;
+      }
+    }
+    */
+    if ((i%2)==HT.getLed(i,true)){
+	standalone=true;
+        resetLevel=-1;//disable the reset button
+	break;
+    }
+  }
+
+  //Check if the big red button is pressed
+  // to be done after standalone test or this may be triggered
+  if (analogRead(RESET) < resetLevel){
+    Serial.println(F(" RESET "));
+    eraseEEPROM();
+  }
 
 #ifdef TESTCRYPTO
   Serial.print(F(" Test crypto no "));
@@ -2139,97 +2196,20 @@ void setup() {
     Serial.println(F(") keeping the values"));
   }
 
-  //Check if the big red button is pressed
-  if (analogRead(RESET) < resetLevel){
-    Serial.println(F(" RESET "));
-    eraseEEPROM();
-  }
   copyEnigmaModel(settings.model);
-
-  Wire.begin(); // enable the wire lib
-
-#ifdef CLOCK
-  uint16_t minute=i2c_read2(DS3231_ADDR,1);
-  if (minute==0xFFFF){
-    clock_active=missing; // no clock
-  }else{
-    Serial.print(F("Time is: "));
-    printTime();
-    Serial.println();
-  }
-#endif
-
-
-  //Check for plugboard
-  Wire.beginTransmission(mcp_address);
-
-  if (Wire.endTransmission()==0){
-    Serial.println(F("Preparing plugboard"));
-    // Setup the 2 port multiplers one at addr+0 and the second at addr+1
-    plugboardPresent=true;
-    for (i=0;i<2;i++){
-      i2c_write2(mcp_address+i,IOCON,0b00011110);   
-      // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
-      i2c_write2(mcp_address+i,IODIRA,0xff); // Set all ports to inputs
-      i2c_write2(mcp_address+i,IODIRB,0xff); // Set all ports to inputs
-      //  i2c_write2(mcp_address+i,GPPUA,0); // disable pullup (for now,to save power)
-      //  i2c_write2(mcp_address+i,GPPUB,0); //
-      i2c_write2(mcp_address+i,GPPUA,0xff);  // enable pullup, seems to sometimes be a problem otherwise
-      i2c_write2(mcp_address+i,GPPUB,0xff);  //
-      }
-  }else{
-    Serial.println(F("No plugboard found"));
-    plugboardPresent=false;
-    settings.plugboardMode=virtualpb;
-  }
-
-  HT.begin(0x00); // This also clears all leds
 
   // Prep decimal point
   for (i=0;i<WALZECNT;i++){
     pinMode(pgm_read_byte(dp+i), OUTPUT);
   }
- 
-  //Check if standalone
-  //real lights are only 0-31 and 64-127 so lets test turning on some lights in 32-63 range
-  //if they stick we probably have a ht16k33 chip there and with that the rest of the enigma
-  //if not it is probably standalone and we need to "disable" things like the switch
-  //or it will fill the serial port with switch changes, and other things or it will be slow.
-  for (i=34;i<63;i++){
-    if ((i%2)==0)
-      HT.setLed(i);
-    else
-      HT.clearLed(i);
-  }
-  delay(100);
-  HT.sendLed();
 
-  //Clear the ram to make sure we read data but don't send it!
-  for (i=0;i<sizeof(HT.displayRam);i++)
-    HT.displayRam[i]=0;
-  
-  standalone=false;//start with assuming it's not standalone
-  for (i=34;i<63;i++){//Verify that they are set correctly, if not assume standalone
-    if ((i%2)==0){
-      if (!HT.getLed(i,true)){
-	standalone=true;
-	break;
-      }
-    } else {
-      if (HT.getLed(i,true)){
-	standalone=true;
-	break;
-      }
-    }
-  }
-  
   if (standalone){
-    Serial.println(F("No IC detected,assuming standalone"));
+    if (!standalone_expected)
+      Serial.println(F("No IC detected,assuming standalone"));
     plugboardPresent=false;
-    resetLevel=-1;//disable the reset button
+  } else { // if standalone
 #ifdef SoundBoard
-    sound_active=missing; //assume no soundboard
-  } else {
+    // Check if we have a sound board
     Serial.println(F("Looking for soundboard"));
     altSerial.begin(9600);
     sendCommand(dfcmd_RESET,0); // reset unit
@@ -2242,19 +2222,129 @@ void setup() {
     //  Serial.println(i);
     if (altSerial.available()==0){
       Serial.println(F(" no soundboard found"));
-      sound_active=missing;
     }else{
       Serial.println(F(" Found a soundboard, activating it"));
+      sound_active=active;
       //  readData(); // read status
-      //  Serial.println(F("setting vol 20"));
+      //  Serial.println(F("setting vol 30"));
       sendCommand(dfcmd_VOLUME,30);
       //  Serial.println(F("Done with soundboard"));
     }
 #endif
-  }
+#ifdef CLOCK
+    // Check if a clock is available
+    uint16_t minute=i2c_read2(DS3231_ADDR,1);
+    if (minute!=0xFFFF){
+      Serial.print(F("Time is: "));
+      printTime();
+      Serial.println();
+      clock_active=inactive;
+    }
+#endif
 
-  Serial.println();
-  if (!standalone){
+    //Check for plugboard
+    Wire.beginTransmission(mcp_address);
+
+    if (Wire.endTransmission()==0){
+      Serial.println(F("Preparing plugboard"));
+      // Setup the 2 port multiplers one at addr+0 and the second at addr+1
+      plugboardPresent=true;
+      for (i=0;i<2;i++){
+        i2c_write2(mcp_address+i,IOCON,0b00011110);   
+        // Init value for IOCON, bank(0)+INTmirror(no)+SQEOP(addr inc)+DISSLW(Slew rate disabled)+HAEN(hw addr always enabled)+ODR(INT open)+INTPOL(act-low)+0(N/A)
+        i2c_write2(mcp_address+i,IODIRA,0xff); // Set all ports to inputs
+        i2c_write2(mcp_address+i,IODIRB,0xff); // Set all ports to inputs
+        //  i2c_write2(mcp_address+i,GPPUA,0); // disable pullup (for now,to save power)
+        //  i2c_write2(mcp_address+i,GPPUB,0); //
+        i2c_write2(mcp_address+i,GPPUA,0xff);  // enable pullup, seems to sometimes be a problem otherwise
+        i2c_write2(mcp_address+i,GPPUB,0xff);  //
+      }
+    }else{
+      Serial.println(F("No plugboard found"));
+      plugboardPresent=false;
+      settings.plugboardMode=virtualpb;
+    } // if Wire.endTransmission
+    
+    Serial.println();
+    Serial.println(F("All LEDs off"));
+    HT.clearAll();
+    //    for (i=0;i<sizeof(HT.displayRam);i++)
+    //      HT.displayRam[i]=0;
+    //    HT.sendLed();
+    for (i=0;i<WALZECNT;i++){
+      decimalPoint(i,false);
+    }
+    
+    //Setup encoder wheel interrupt
+    for (i = 0; i < sizeof(encoderPins); i++) {
+      pinMode(pgm_read_byte(encoderPins+i), INPUT_PULLUP);
+#ifdef ESP8266
+      attachInterrupt(digitalPinToInterrupt(pgm_read_byte(encoderPins+i)),updateEncoderState,CHANGE);
+#else
+      pciSetup(pgm_read_byte(encoderPins+i));
+#endif
+    }
+
+    //Check if key is pressed to load a preset
+    key=checkKB();
+    if (key>0){
+      i=pgm_read_byte(&scancodes[0]+(key)-1);
+      if (i>='0' && i <= '3'){
+        switch (i) {
+        case '0': // leftmost button UNDER WALZE 0
+          if (!readSettings(1)){
+#ifdef NOMEMLIMIT
+            Serial.println();
+            Serial.println();
+            Serial.println(F("Preset 1 - M3,UKWB, wheel III,II,I, ringstell AAA:"));
+#endif
+            setConfig(M3,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)""," AAA");
+          }
+          break;
+        case '1':
+          if (!readSettings(2)){
+#ifdef NOMEMLIMIT
+            Serial.println();
+            Serial.println();
+            Serial.println(F("Preset 2 - M4,UKWBt, wheel beta,III,II,I, ringstell AAAA:"));
+#endif
+            setConfig(M4,UKWBT,WALZE_Beta,WALZE_III,WALZE_II,WALZE_I,ETW0,"AAAA",(char *)"","AAAA");
+          }
+          break;
+        case '2':
+          if (!readSettings(3)){
+#ifdef NOMEMLIMIT
+            Serial.println();
+            Serial.println();
+            Serial.println(F("Preset 3 - M3, wheel I,II,III, ringstell AAA"));
+#endif
+            setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",(char *)""," AAA");
+          }
+          break;
+        case '3':
+          if (!readSettings(4)){
+#ifdef NOMEMLIMIT
+            Serial.println();
+            Serial.println();
+            Serial.println(F("Preset 4 - NORW,UKWN, wheel NIII,NII,NI, ringstell AAA:"));
+            setConfig(NorwayEnigma,UKWN,WALZE0,WALZE_NIII,WALZE_NII,WALZE_NI,ETW0," AAA",""," AAA");
+#else
+            setConfig(EnigmaI,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)"AB CD EF GH IJ KL MN OP QR ST"," AAA");
+#endif
+          }
+          break;
+        } // switch
+        saveSettings(i-'0'+1);
+        Serial.print(F("Loaded preset "));
+        Serial.println((char)i+1);
+        strBuffer[3]=i+1;
+        displayString(strBuffer, 200);
+        delay(2000);
+      } // if 0-3
+    } // if key>0
+    
+    delay(500);
+    
     // Test the screen
     Serial.println(F("All LEDs on"));
     for (i=0;i<sizeof(HT.displayRam);i++)
@@ -2264,53 +2354,27 @@ void setup() {
     for (i=0;i<WALZECNT;i++){
       decimalPoint(i,true);
     }
-  }
-  
-  if (analogRead(RESET) < resetLevel){
+    if (analogRead(RESET) < resetLevel){
       Serial.println(F("EEPROM settings erased"));
 #ifdef SoundBoard
       playSound(2000); // "meinEnigma"
       playSound(2014); // "ready"
-//can't be played here, loses power, dunno why      playSound(2200); // "All keys and settings are now erased, please power off."
+      //can't be played here, loses power, dunno why      playSound(2200); // "All keys and settings are now erased, please power off."
 #endif
       while (analogRead(RESET) < resetLevel){} // wait for button to be released.
-  } else {
-    if (!standalone){
-      delay(500);
-    }
-  }
+    } // if RESET
+    delay(500);
+  } // if standalone;else
 
 #ifdef SoundBoard
   playSound(2000); // "meinEnigma"
   playSound(2002); // "starting up"
   //playSound(2004); // "initializing"
 #endif
-     
-  if (!standalone){  
-    Serial.println(F("All LEDs off"));
-    HT.clearAll();
-    //    for (i=0;i<sizeof(HT.displayRam);i++)
-    //      HT.displayRam[i]=0;
-    //    HT.sendLed();
-    for (i=0;i<WALZECNT;i++){
-      decimalPoint(i,false);
-    }
-    delay(500);
-  }
 
 #ifdef ESP8266
   EEPROM.begin(EEPROMSIZE);
 #endif
-
-  //Setup encoder wheel interrupt
-  for (i = 0; i < sizeof(encoderPins); i++) {
-    pinMode(pgm_read_byte(encoderPins+i), INPUT_PULLUP);
-#ifdef ESP8266
-    attachInterrupt(digitalPinToInterrupt(pgm_read_byte(encoderPins+i)),updateEncoderState,CHANGE);
-#else
-    pciSetup(pgm_read_byte(encoderPins+i));
-#endif
-  }
 
 #ifndef TESTCRYPTO
   if (!standalone){
@@ -2319,63 +2383,6 @@ void setup() {
   }
 #endif
   
-  //Check if key is pressed to load a preset
-  key=checkKB();
-  if (key>0){
-    i=pgm_read_byte(&scancodes[0]+(key)-1);
-    if (i>='0' && i <= '3'){
-      switch (i) {
-      case '0': // leftmost button UNDER WALZE 0
-	if (!readSettings(1)){
-#ifdef NOMEMLIMIT
-	  Serial.println();
-	  Serial.println();
-	  Serial.println(F("Preset 1 - M3,UKWB, wheel III,II,I, ringstell AAA:"));
-#endif
-	  setConfig(M3,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)""," AAA");
-	}
-	break;
-      case '1':
-	if (!readSettings(2)){
-#ifdef NOMEMLIMIT
-	  Serial.println();
-	  Serial.println();
-	  Serial.println(F("Preset 2 - M4,UKWBt, wheel beta,III,II,I, ringstell AAAA:"));
-#endif
-	  setConfig(M4,UKWBT,WALZE_Beta,WALZE_III,WALZE_II,WALZE_I,ETW0,"AAAA",(char *)"","AAAA");
-	}
-	break;
-      case '2':
-	if (!readSettings(3)){
-#ifdef NOMEMLIMIT
-	  Serial.println();
-	  Serial.println();
-	  Serial.println(F("Preset 3 - M3, wheel I,II,III, ringstell AAA"));
-#endif
-	  setConfig(M3,UKWB,WALZE0,WALZE_I,WALZE_II,WALZE_III,ETW0," AAA",(char *)""," AAA");
-	}
-	break;
-      case '3':
-	if (!readSettings(4)){
-#ifdef NOMEMLIMIT
-	  Serial.println();
-	  Serial.println();
-	  Serial.println(F("Preset 4 - NORW,UKWN, wheel NIII,NII,NI, ringstell AAA:"));
-	  setConfig(NorwayEnigma,UKWN,WALZE0,WALZE_NIII,WALZE_NII,WALZE_NI,ETW0," AAA",""," AAA");
-#else
-	  setConfig(EnigmaI,UKWB,WALZE0,WALZE_III,WALZE_II,WALZE_I,ETW0," AAA",(char *)"AB CD EF GH IJ KL MN OP QR ST"," AAA");
-#endif
-	}
-	break;
-      } // switch
-      saveSettings(i-'0'+1);
-      Serial.print(F("Loaded preset "));
-      Serial.println((char)i+1);
-      strBuffer[3]=i+1;
-      displayString(strBuffer, 200);
-      delay(2000);
-    } // if 0-3
-  } // if key>0
 
   operationMode=none;//by setting it to none it triggers a call to printSettings();
   checkSwitchPos();
@@ -4402,14 +4409,15 @@ void loop() {
 
 #ifdef CLOCK
 	case 'C': // Show clock
-	  if (clock_active==active){
-	    clock_active=inactive;
-	  }else if (clock_active==inactive){
-	    clock_active=active;
-	  }
 	  if (clock_active==missing){
 	    Serial.println(F("Clock missing"));
 	  }else{
+            if (clock_active==active){
+              clock_active=inactive;
+            }else if (clock_active==inactive){
+              clock_active=active;
+            }
+
 	    hourminute=i2c_read2(DS3231_ADDR,1);
 	    Serial.print(F("Time is :"));
 	    Serial.print(hourminute >>8 & 0xFF,HEX);
@@ -4419,6 +4427,7 @@ void loop() {
 	      Serial.print(F(":"));
 	    }
 	    Serial.println(hourminute & 0xFF,HEX);
+
 	    //DEBUG
 	    //	  Serial.print(F("RAW: "));Serial.println(hourminute,HEX);
 	    //	  for (i=0;i<4;i++){
@@ -4524,7 +4533,7 @@ void loop() {
 	  break;
 
 	case 'V': // Show version CODE_VERSION but making that dynamic requires a lot of code
-	  displayString("V109",0);
+	  displayString("V110",0);
 	  decimalPoint(1,true);
 	  delay(2000);
 	  decimalPoint(1,false);

@@ -168,6 +168,10 @@ CC-BY cite: http://busyducks.com/ascii-art-arduinos
 //on M4 the plugboard is organized in numeric order
 //#define NUMERICPB 
 
+//if expecting it to be standalone then no msg about missing chip
+//#define STANDALONE
+
+
 //Include code for the sound board size:27716-25380=2336
 #define SoundBoard
 
@@ -1273,7 +1277,12 @@ void printVersion(){
   if (int(CODE_VERSION%100) <10){
     Serial.print(F("0"));
   }
-  Serial.println(int(CODE_VERSION%100),DEC);
+  Serial.print(int(CODE_VERSION%100),DEC);
+#ifdef STANDALONE
+  Serial.println(F("s"));
+#else
+  Serial.println(F("d"));
+#endif
 } // printVersion()
 
 /****************************************************************/
@@ -2208,6 +2217,7 @@ void setup() {
       Serial.println(F("No IC detected,assuming standalone"));
     plugboardPresent=false;
   } else { // if standalone
+    Serial.println(F("IC detected"));
 #ifdef SoundBoard
     // Check if we have a sound board
     Serial.println(F("Looking for soundboard"));
@@ -2264,16 +2274,6 @@ void setup() {
       plugboardPresent=false;
       settings.plugboardMode=virtualpb;
     } // if Wire.endTransmission
-    
-    Serial.println();
-    Serial.println(F("All LEDs off"));
-    HT.clearAll();
-    //    for (i=0;i<sizeof(HT.displayRam);i++)
-    //      HT.displayRam[i]=0;
-    //    HT.sendLed();
-    for (i=0;i<WALZECNT;i++){
-      decimalPoint(i,false);
-    }
     
     //Setup encoder wheel interrupt
     for (i = 0; i < sizeof(encoderPins); i++) {
@@ -2363,7 +2363,12 @@ void setup() {
 #endif
       while (analogRead(RESET) < resetLevel){} // wait for button to be released.
     } // if RESET
-    delay(500);
+    delay(1000);
+    Serial.println(F("All LEDs off\n"));
+    HT.clearAll();
+    for (i=0;i<WALZECNT;i++){
+      decimalPoint(i,false);
+    }
   } // if standalone;else
 
 #ifdef SoundBoard

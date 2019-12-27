@@ -3315,6 +3315,7 @@ boolean checkNotch(uint8_t i){
 /****************************************************************/
 // http://www.cryptomuseum.com/crypto/enigma/working.htm#double
 // http://www.matematiksider.dk/enigma_eng.html#how_enigma_works
+//   rotor I III II
 //   Notch: Q V E
 //   Start: S U D
 //   key1:  S U E # normal, only right turned
